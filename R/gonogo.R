@@ -1,37 +1,52 @@
 # Allow wild-card searches, or date restrictions
 read_eventide_multi <- function(name,
                                 basedir = getwd(),
-                                task = "GNG",
                                 start_date = "30012017", # daymonthyear
                                 end_date = "30012021",   # daymonthyear
                                 min_trials = 1
 ) {
   library(dplyr)
-  library(readr)
 
   fnames <- list.files(path = basedir, pattern =
-                          glob2rx(paste0(name, "_", task, "*")))
+                          glob2rx(paste0(name, "_", "GNG", "*")))
 
-  d <- unlist(purrr::map(stringr::str_split(fnames,"_"), 3))
+  d <- purrr::map_chr(stringr::str_split(fnames,"_"), 3)
   d <- as.POSIXlt(d,  format = "%d%m%Y", tz = "Europe/Paris")
 
-  # start & end dates
+  # Sort by ascending experiment date
+  ind <- order(d)
+  fnames <- fnames[ind]
+  d <- d[ind]
+
   start_date <- as.POSIXlt(start_date, format = "%d%m%Y", tz = "Europe/Paris")
   end_date <- as.POSIXlt(end_date, format = "%d%m%Y", tz = "Europe/Paris")
 
   ind <- (start_date <= d) & (d <= end_date)
 
-  dat <- purrr::map(fnames[ind], read_eventide)
+  if (!any(ind)) {
+    out <- list(
+      name = name,
+      n_session = 0,
+      date = NULL,
+      fname = NULL,
+      version = NULL,
+      trial_data = NULL
+    )
+  } else {
+    # Read session data
+    dat <- purrr::map(fnames[ind], read_eventide)
 
-  out <- list(
-    name = name,
-    task = task,
-    version = unlist(purrr::map(dat, 3)),
-    date = unlist(purrr::map(dat, 2)),
-    trial_data = bind_rows(purrr::map(dat, 4), .id = "session")
-  )
+    out <- list(
+      name = name,
+      n_session = sum(ind),
+      date = unlist(purrr::map(dat, "date") %>% purrr::reduce(c)),
+      fname = fnames[ind],
+      version = purrr::map_chr(dat, "version"),
+      trial_data = purrr::map_dfr(dat, "trial_data", .id = "session")
+    )
+  }
 
-  class(out) <-"GNG_multisession_data"
+  class(out) <- "GNG_multisession_data"
 
   return(out)
 }
@@ -43,8 +58,9 @@ read_eventide <- function(fname) {
   # Parse filename
 
   ## Parse header
+  x <- str_replace_all(readLines(fname, n = 8), ";", "")
   hdr_txt <- stringr::str_split(
-    stringr::str_replace_all(readLines(fname, n = 8), stringr::fixed(" "), ""),
+    stringr::str_replace_all(x, stringr::fixed(" "), ""),
     ":", simplify = TRUE)
   ind <- hdr_txt[,2] != ""
   hdr_txt <- hdr_txt[ind, ]
