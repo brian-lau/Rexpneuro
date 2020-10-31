@@ -13,7 +13,9 @@ Imports:
     readr,
     janitor,
     dplyr,
-    purrr
+    purrr,
+    lme4,
+    emmeans
 License: What license is it under?
 Encoding: UTF-8
 LazyData: true

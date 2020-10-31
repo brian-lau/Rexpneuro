@@ -127,7 +127,7 @@ contra_ipsi_tar <- function(x, subject) {
     dir[x > 0] = "contra"
   } else if (subject == "Flocky") {
     dir[x > 0] = "ipsi"
-    dair[x < 0] = "contra"
+    dir[x < 0] = "contra"
   }
   dir = as.factor(dir)
   return(dir)
