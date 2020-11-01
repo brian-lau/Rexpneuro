@@ -12,6 +12,7 @@ Imports:
     stringr,
     readr,
     janitor,
+    skimr,
     dplyr,
     purrr,
     lme4,

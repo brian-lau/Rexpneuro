@@ -8,7 +8,7 @@ read_eventide_multi <- function(name,
   library(dplyr)
 
   fnames <- list.files(path = basedir, pattern =
-                          glob2rx(paste0(name, "_", "GNG", "*")))
+                          glob2rx(paste0(name, "_", "GNG", "*.txt")))
 
   d <- purrr::map_chr(stringr::str_split(fnames,"_"), 3)
   d <- as.POSIXlt(d,  format = "%d%m%Y", tz = "Europe/Paris")
@@ -25,6 +25,7 @@ read_eventide_multi <- function(name,
 
   if (!any(ind)) {
     out <- list(
+      call = match.call(),
       name = name,
       n_session = 0,
       date = NULL,
@@ -37,6 +38,7 @@ read_eventide_multi <- function(name,
     dat <- purrr::map(fnames[ind], read_eventide)
 
     out <- list(
+      call = match.call(),
       name = name,
       n_session = sum(ind),
       date = unlist(purrr::map(dat, "date") %>% purrr::reduce(c)),
@@ -46,9 +48,48 @@ read_eventide_multi <- function(name,
     )
   }
 
-  class(out) <- "GNG_multisession_data"
+  class(out) <- "GNGeventide_multi"
 
   return(out)
+}
+
+summary.GNGeventide_multi <- function(obj) {
+  library(skimr)
+
+  cat(" Call: ")
+  print(obj$call)
+  cat(" Name:\t\t", obj$name, "\n")
+  cat(" # sessions:\t", obj$n_session, "\n")
+
+  new_hist <- function(x){
+    inline_hist(x, 20)
+  }
+  my_skim <- skim_with(
+    base = sfl(missing = n_missing),
+    numeric = sfl(mean = mean,
+                  std = sd,
+                  med = median,
+                  mad = mad,
+                  hist = new_hist),
+    append = F
+    )
+
+  x <- obj$trial_data %>%
+    group_by(condition_name) %>%
+    my_skim(is_correct_trial, is_abort_trial)
+  print(x, include_summary = FALSE, width = NULL)
+
+  x <- obj$trial_data %>%
+    group_by(block) %>%
+    my_skim(is_correct_trial, is_abort_trial)
+  print(x, include_summary = FALSE, width = NULL)
+
+  cat("\nFilter by correct trials")
+  x <- obj$trial_data %>%
+    group_by(block) %>%
+    filter(is_correct_trial & (condition_name != "Nogo")) %>%
+    my_skim(counter_total_trials, counter_trials_in_block, rt, mt)
+  print(x, include_summary = FALSE, width = NULL)
 }
 
 read_eventide <- function(fname) {
@@ -58,7 +99,7 @@ read_eventide <- function(fname) {
   # Parse filename
 
   ## Parse header
-  x <- str_replace_all(readLines(fname, n = 8), ";", "")
+  x <- stringr::str_replace_all(readLines(fname, n = 8), ";", "")
   hdr_txt <- stringr::str_split(
     stringr::str_replace_all(x, stringr::fixed(" "), ""),
     ":", simplify = TRUE)
@@ -92,10 +133,10 @@ read_eventide <- function(fname) {
     janitor::remove_empty(which = "cols") %>%
     janitor::clean_names()
 
-  cnames <- colnames(df)
-
   df$mt <- df$tt - df$rt
-  if ("cue_set_index" %in% cnames) df$cue_set_index <- 0
+  if ("cue_set_index" %in% colnames(df)) df$cue_set_index <- 0
+
+  cnames <- colnames(df)
 
   # convert time to seconds
   msec_to_sec <- function(x, na.rm = FALSE) (x/1000)
@@ -105,13 +146,18 @@ read_eventide <- function(fname) {
 
   df <- df %>%
     mutate_at(which(cnames %in% tvars), msec_to_sec) %>%
-    tibble::add_column(direction = contra_ipsi_tar(df$tar_x, out$name),
+    tibble::add_column(direction = contra_ipsi_tar(df$tar_x, tolower(out$name)),
                        .after = "cue_set_index") %>%
+    tibble::add_column(block = as.factor(df$block_index),
+                       .after = "block_index") %>%
     relocate(mt, .after = rt2)
+
+  # set factor levels of trial_result_str, condition_name, direction
+  levels(df$block) <- c("GoContr", "GoMixed")
 
   out$trial_data <- df
 
-  class(out) <- "GNG_session_data"
+  class(out) <- "GNGeventide"
 
   return(out)
 }
@@ -119,13 +165,13 @@ read_eventide <- function(fname) {
 contra_ipsi_tar <- function(x, subject) {
   # Contra/Ipsi relative to arm used
   dir = x
-  if (subject == "Tess") {
+  if (subject == "tess") {
     dir[x < 0] = "ipsi"
     dir[x > 0] = "contra"
-  } else if (subject == "Chanel") {
+  } else if (subject == "chanel") {
     dir[x < 0] = "ipsi"
     dir[x > 0] = "contra"
-  } else if (subject == "Flocky") {
+  } else if (subject == "flocky") {
     dir[x > 0] = "ipsi"
     dir[x < 0] = "contra"
   }
