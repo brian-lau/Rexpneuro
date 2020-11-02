@@ -8,7 +8,7 @@ read_eventide_multi <- function(name,
   library(dplyr)
 
   fnames <- list.files(path = basedir, pattern =
-                          glob2rx(paste0(name, "_", "GNG", "*.txt")))
+                         glob2rx(paste0(name, "_", "GNG", "*.txt")))
 
   d <- purrr::map_chr(stringr::str_split(fnames,"_"), 3)
   d <- as.POSIXlt(d,  format = "%d%m%Y", tz = "Europe/Paris")
@@ -53,43 +53,55 @@ read_eventide_multi <- function(name,
   return(out)
 }
 
-summary.GNGeventide_multi <- function(obj) {
+summary.GNGeventide_multi <- function(obj,
+                                      skim_func = NULL, # see skimr::skim_with
+                                      summarise_durations = FALSE
+) {
+  library(dplyr)
   library(skimr)
 
-  cat(" Call: ")
+  cat("Call: ")
   print(obj$call)
-  cat(" Name:\t\t", obj$name, "\n")
-  cat(" # sessions:\t", obj$n_session, "\n")
+  cat("Name:\t\t", obj$name, "\n")
+  cat("# sessions:\t", obj$n_session, "\n")
+  cat("# trials:\t", nrow(out$trial_data), "\n")
 
-  new_hist <- function(x){
-    inline_hist(x, 20)
-  }
-  my_skim <- skim_with(
-    base = sfl(missing = n_missing),
-    numeric = sfl(mean = mean,
-                  std = sd,
-                  med = median,
-                  mad = mad,
-                  hist = new_hist),
-    append = F
+  if (is.null(skim_func)) {
+    skim_func <- skim_with(
+      base = sfl(missing = n_missing),
+      numeric = sfl(mean = mean,
+                    std = sd,
+                    med = median,
+                    mad = mad,
+                    hist = function(x) inline_hist(x, 20)),
+      append = F
     )
+  }
 
   x <- obj$trial_data %>%
-    group_by(condition_name) %>%
-    my_skim(is_correct_trial, is_abort_trial)
+    group_by(condition) %>%
+    skim_func(is_correct_trial, is_abort_trial)
   print(x, include_summary = FALSE, width = NULL)
 
   x <- obj$trial_data %>%
     group_by(block) %>%
-    my_skim(is_correct_trial, is_abort_trial)
+    skim_func(is_correct_trial, is_abort_trial)
   print(x, include_summary = FALSE, width = NULL)
 
   cat("\nFilter by correct trials")
   x <- obj$trial_data %>%
     group_by(block) %>%
-    filter(is_correct_trial & (condition_name != "Nogo")) %>%
-    my_skim(counter_total_trials, counter_trials_in_block, rt, mt)
+    filter(is_correct_trial & (condition != "nogo")) %>%
+    skim_func(counter_total_trials, counter_trials_in_block, rt, mt)
   print(x, include_summary = FALSE, width = NULL)
+
+  if (summarise_durations) {
+    ind = stringr::str_detect(names(out$trial_data), "^measured")
+    x <- obj$trial_data %>%
+      skim_func(names(out$trial_data)[stringr::str_detect(names(out$trial_data), "^measured")])
+    print(x, include_summary = FALSE, width = NULL)
+  }
+
 }
 
 read_eventide <- function(fname) {
@@ -134,7 +146,11 @@ read_eventide <- function(fname) {
     janitor::clean_names()
 
   df$mt <- df$tt - df$rt
-  if ("cue_set_index" %in% colnames(df)) df$cue_set_index <- 0
+  if (!("cue_set_index" %in% colnames(df))) {
+    df <- df %>%
+      tibble::add_column(cue_set_index = 0,
+                                        .after = "block_index")
+  }
 
   cnames <- colnames(df)
 
@@ -153,7 +169,37 @@ read_eventide <- function(fname) {
     relocate(mt, .after = rt2)
 
   # set factor levels of trial_result_str, condition_name, direction
-  levels(df$block) <- c("GoContr", "GoMixed")
+  levels(df$block) <- c("contr", "mixed")
+
+  df$condition_name[df$condition_name=="Go"] = "go"
+  df$condition_name[df$condition_name=="Go control"] = "go_control"
+  df$condition_name[df$condition_name=="Nogo"] = "nogo"
+  df <- df %>%
+    tibble::add_column(condition = factor(df$condition_name,
+                                          levels = c("go_control", "go", "nogo")),
+                       .after = "condition_name")
+
+  df$trial_result_str[df$trial_result_str=="target touch"] = "target_touch"
+  df$trial_result_str[df$trial_result_str=="fixation holding"] = "fixation_holding"
+  df$trial_result_str[df$trial_result_str=="Late retouch"] = "err_late_retouch"
+  df$trial_result_str[df$trial_result_str=="cue touch aborted"] = "err_cue_touch_aborted"
+  df$trial_result_str[df$trial_result_str=="Else-where touch"] = "err_elsewhere_touch"
+  df$trial_result_str[df$trial_result_str=="Overall too late"] = "err_overall_too_late"
+  df$trial_result_str[df$trial_result_str=="Anticipation"] = "err_anticipation"
+  df$trial_result_str[df$trial_result_str=="Early target release"] = "err_early_target_release"
+
+  df <- df %>%
+    tibble::add_column(event = factor(df$trial_result_str,
+                                          levels = c("fixation_holding",
+                                                     "target_touch",
+                                                     "err_anticipation",
+                                                     "err_cue_touch_aborted",
+                                                     "err_late_retouch",
+                                                     "err_elsewhere_touch",
+                                                     "err_early_target_release",
+                                                     "err_overall_too_late"
+                                                     )),
+                       .after = "trial_result_str")
 
   out$trial_data <- df
 
