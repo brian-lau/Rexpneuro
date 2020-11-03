@@ -208,6 +208,67 @@ read_eventide <- function(fname) {
   return(out)
 }
 
+read_eventide_tracker <- function(fname) {
+  library(dplyr)
+  library(readr)
+
+  # Parse filename
+
+  ## Parse header
+  x <- stringr::str_replace_all(readLines(fname, n = 3), ";", "")
+  hdr_txt <- stringr::str_split(
+    stringr::str_replace_all(x, stringr::fixed(" "), ""),
+    ":", simplify = TRUE, n = 2)
+  ind <- hdr_txt[,2] != ""
+  hdr_txt <- hdr_txt[ind, ]
+
+  out = list(
+    date = as.POSIXct(hdr_txt[1,2], "%Y.%d.%m%H:%M", tz = "Europe/Paris"),
+    version = hdr_txt[2,2]
+  )
+
+  ## Read data
+  ct <- readr::cols_only(
+    `User Field` = col_double(),
+    `Current Event` = col_character(),
+    `EventIDE TimeStamp` = col_double(),
+    `Gaze CVX` = col_double(),
+    `Gaze CVY` = col_double(),
+    #`Gaze X` = col_double(),
+    #`Gaze Y` = col_double(),
+    Pressure = col_double(),
+    #`Is Touch` = col_logical(),
+    X10 = col_logical()
+  )
+
+  df <- readr::read_csv2(fname, col_names = TRUE, col_types = ct, skip = 3, locale(decimal_mark = ","))
+
+  df <- df %>%
+    janitor::remove_empty(which = "cols") %>%
+    rename("counter_total_trials" = "User Field",
+           "state" = "Current Event",
+           "t" = "EventIDE TimeStamp",
+           "x" = "Gaze CVX",
+           "y" = "Gaze CVY",
+           "pressure" = "Pressure")
+
+  df$state = as.factor(df$state)
+
+  df <- df %>%
+    filter((state == "Fixation") |
+             (state == "Cue") |
+             (state == "Target>Holding Fixation ROI") |
+             (state == "Target>Waiting") |
+             (state == "Target>Target touch") |
+             (state == "Eval") |
+             (state == "Correct>Delay") |
+             (state == "Abort")) %>%
+    mutate(x = ifelse(pressure==0, NA, x), y = ifelse(pressure==0, NA, y))
+
+  df2 <- df %>% group_by(counter_total_trials) %>% summarize(start=min(t),end=max(t))
+
+}
+
 contra_ipsi_tar <- function(x, subject) {
   # Contra/Ipsi relative to arm used
   dir = x
