@@ -208,7 +208,7 @@ read_eventide <- function(fname) {
   return(out)
 }
 
-read_eventide_tracker <- function(fname) {
+read_eventide_tracker <- function(fname, Fs = 100) {
   library(dplyr)
   library(readr)
 
@@ -265,8 +265,30 @@ read_eventide_tracker <- function(fname) {
              (state == "Abort")) %>%
     mutate(x = ifelse(pressure==0, NA, x), y = ifelse(pressure==0, NA, y))
 
-  df2 <- df %>% group_by(counter_total_trials) %>% summarize(start=min(t),end=max(t))
+  ## Linearly interpolate to regular grid
+  # Create a regular grid
+  myseq <- function(from,to,by) tibble(t = seq(from, to, by))
+  df2 <- df %>%
+    group_by(counter_total_trials) %>%
+    summarize(start = min(t), end = max(t)) %>%
+    group_by(counter_total_trials) %>%
+    mutate(t_r = map2(start, end, ~myseq(start, end, 1000/Fs))) %>% # times in msec
+    select(-start,-end)
 
+  # Join with original data
+  df2 = df2 %>% full_join(df %>% group_by(counter_total_trials) %>% nest())
+
+  # Interpolate
+  myapprox <- function(x, y, xout) tibble(r = approx(x, y, xout)$y)
+  df2 <- df2 %>%
+    mutate(x = map2(data, t_r, ~myapprox(.x$t, .x$x, .y$t)),
+           y = map2(data, t_r, ~myapprox(.x$t, .x$y, .y$t)),
+           pressure = map2(data, t_r, ~myapprox(.x$t, .x$pressure, .y$t))) %>%
+    select(-data) %>%
+    unnest(cols = c(t_r, x, y, pressure), names_sep = "_") %>%
+    rename(t = t_r_t, x = x_r, y = y_r, pressure = pressure_r)
+
+  # Reset NAs
 }
 
 contra_ipsi_tar <- function(x, subject) {
