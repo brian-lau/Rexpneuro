@@ -288,7 +288,17 @@ read_eventide_tracker <- function(fname, Fs = 100) {
     unnest(cols = c(t_r, x, y, pressure), names_sep = "_") %>%
     rename(t = t_r_t, x = x_r, y = y_r, pressure = pressure_r)
 
-  # Reset NAs
+  ## Reset NAs, R version 4 approx allows leaving NAs, might be easier to upgrade...
+  df <- df %>% mutate(id = row_number())
+  # Find liftoffs
+  temp = df %>%
+    group_by(counter_total_trials) %>%
+    filter((pressure == 0)) %>%
+    select(id)
+
+  df %>% filter(id %in% unique(sort(c(temp$id, temp$id + 1)))) %>%
+    mutate(d = c(1, diff(id))) %>%
+    mutate(d = ifelse(d>1, 0, 1))
 }
 
 contra_ipsi_tar <- function(x, subject) {
