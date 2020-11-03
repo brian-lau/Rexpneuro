@@ -295,10 +295,25 @@ read_eventide_tracker <- function(fname, Fs = 100) {
     group_by(counter_total_trials) %>%
     filter((pressure == 0)) %>%
     select(id)
+  # List of NA row positions, plus immediately following row number, which indicates
+  # subsequent contact with touchscreen
+  idu = unique(sort(c(temp$id, temp$id + 1)))
 
-  df %>% filter(id %in% unique(sort(c(temp$id, temp$id + 1)))) %>%
-    mutate(d = c(1, diff(id))) %>%
-    mutate(d = ifelse(d>1, 0, 1))
+  # myfunc <- function(x,y) tibble(dc = x*y)
+  # temp <- df %>% filter(id %in% idu) %>%
+  #   mutate(d = c(1, diff(id))) %>%
+  #   mutate(d = ifelse(d > 1, 0, 1)) %>%
+  #   select(counter_total_trials,state,t,id,d) %>%
+  #   group_by(counter_total_trials) %>%
+  #   nest() %>%
+  #   mutate(dc = map(data, ~myfunc(.x$d, min(.x$t))))
+
+  temp <- df %>% filter(id %in% idu) %>%
+    mutate(d = c(1, diff(id))) %>% # 1 indicates sequential frames
+    mutate(d = ifelse(d > 1, 0, 1)) %>% # set non-sequential to 0, subsequent contact
+    mutate(d2 = 1 + cumsum(1-d)) %>% # incrementing counter of unique liftoffs
+    group_by(counter_total_trials, d2) %>%
+    summarise(start = first(t), end = last(t))
 }
 
 contra_ipsi_tar <- function(x, subject) {
