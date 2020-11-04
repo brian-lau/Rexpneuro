@@ -7,6 +7,7 @@ Authors@R: person("Brian", "Lau", email = "brian.lau@upmc.fr",
 Maintainer: Brian Lau <brian.lau@upmc.fr>
 Description: More about what it does (maybe more than one line)
     Use four spaces when indenting paragraphs within the Description.
+Depends: R (>= 4.0.0)
 Imports:
     tibble,
     stringr,

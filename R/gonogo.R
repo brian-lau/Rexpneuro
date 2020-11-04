@@ -210,6 +210,8 @@ read_eventide <- function(fname) {
 
 read_eventide_tracker <- function(fname, Fs = 100) {
   library(dplyr)
+  library(tidyr)
+  library(purrr)
   library(readr)
 
   # Parse filename
@@ -270,51 +272,57 @@ read_eventide_tracker <- function(fname, Fs = 100) {
   myseq <- function(from,to,by) tibble(t = seq(from, to, by))
   df2 <- df %>%
     group_by(counter_total_trials) %>%
-    summarize(start = min(t), end = max(t)) %>%
+    summarise(start = min(t), end = max(t), .groups = "drop") %>%
     group_by(counter_total_trials) %>%
     mutate(t_r = map2(start, end, ~myseq(start, end, 1000/Fs))) %>% # times in msec
     select(-start,-end)
 
   # Join with original data
-  df2 = df2 %>% full_join(df %>% group_by(counter_total_trials) %>% nest())
+  df2 = df2 %>%
+    full_join(df %>% group_by(counter_total_trials) %>% nest(), by = "counter_total_trials")
 
   # Interpolate
-  myapprox <- function(x, y, xout) tibble(r = approx(x, y, xout)$y)
+  myapprox <- function(x, y, xout) tibble(r = approx(x, y, xout, ties = min, na.rm = FALSE)$y)
   df2 <- df2 %>%
     mutate(x = map2(data, t_r, ~myapprox(.x$t, .x$x, .y$t)),
            y = map2(data, t_r, ~myapprox(.x$t, .x$y, .y$t)),
            pressure = map2(data, t_r, ~myapprox(.x$t, .x$pressure, .y$t))) %>%
     select(-data) %>%
     unnest(cols = c(t_r, x, y, pressure), names_sep = "_") %>%
-    rename(t = t_r_t, x = x_r, y = y_r, pressure = pressure_r)
+    rename(t = t_r_t, x = x_r, y = y_r, pressure = pressure_r) %>%
+    mutate(pressure = ifelse(is.na(x), 0, pressure))
 
-  ## Reset NAs, R version 4 approx allows leaving NAs, might be easier to upgrade...
-  df <- df %>% mutate(id = row_number())
-  # Find liftoffs
-  temp = df %>%
-    group_by(counter_total_trials) %>%
-    filter((pressure == 0)) %>%
-    select(id)
-  # List of NA positions, plus immediately following row number, which indicates
-  # subsequent contact with touchscreen
-  idu = unique(sort(c(temp$id, temp$id + 1)))
+  # ## Reset NAs, R version 4 approx allows leaving NAs, might be easier to upgrade...
+  # df <- df %>% mutate(id = row_number())
+  # # Find liftoffs
+  # temp <- df %>%
+  #   group_by(counter_total_trials) %>%
+  #   filter((pressure == 0)) %>%
+  #   select(counter_total_trials, id)
+  # # List of NA positions, plus immediately following row number, which indicates
+  # # subsequent contact with touchscreen
+  # idu = unique(sort(c(temp$id, temp$id + 1)))
+  #
+  # # Gather start and end times of liftoffs
+  # nat <- df %>% filter(id %in% idu) %>%
+  #   mutate(d = c(1, diff(id))) %>% # 1 indicates sequential frames
+  #   mutate(d = ifelse(d > 1, 0, 1)) %>% # set non-sequential to 0, subsequent contact
+  #   mutate(d2 = 1 + cumsum(1-d)) %>% # incrementing counter of unique liftoffs
+  #   group_by(counter_total_trials, d2) %>%
+  #   summarise(start = first(t), end = last(t), .groups = "drop") %>%
+  #   pivot_longer(cols = c(start, end))
+  #
+  # ind <- findInterval(df2$t, nat$value)
+  # ind <- ifelse((ind %% 2) == 0, FALSE, TRUE)
+  #
+  # df2$x[ind] <- NA
+  # df2$y[ind] <- NA
+  # df2$pressure[ind] <- 0
 
-  # Gather start and end times of liftoffs
-  nat <- df %>% filter(id %in% idu) %>%
-    mutate(d = c(1, diff(id))) %>% # 1 indicates sequential frames
-    mutate(d = ifelse(d > 1, 0, 1)) %>% # set non-sequential to 0, subsequent contact
-    mutate(d2 = 1 + cumsum(1-d)) %>% # incrementing counter of unique liftoffs
-    group_by(counter_total_trials, d2) %>%
-    summarise(start = first(t), end = last(t))
-
-
-  for (i in 1:nrow(nat)) {
-    ind <- which(between(df2$t, nat[i,"start"], nat[i,"end"]))
-    if (length(ind)>0) {
-      df2[ind,c("x","y")] <- NA
-      df2[ind,"pressure"] <- NA
-    }
-  }
+  out$Fs <- Fs
+  out$tracker_data <- df2
+  out$df <- df
+  return(out)
 }
 
 contra_ipsi_tar <- function(x, subject) {
