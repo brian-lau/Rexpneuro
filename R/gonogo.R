@@ -254,7 +254,6 @@ read_eventide_tracker <- function(fname, Fs = 100) {
            "y" = "Gaze CVY",
            "pressure" = "Pressure")
 
-  df$state = as.factor(df$state)
 
   df <- df %>%
     filter((state == "Fixation") |
@@ -266,6 +265,10 @@ read_eventide_tracker <- function(fname, Fs = 100) {
              (state == "Correct>Delay") |
              (state == "Abort")) %>%
     mutate(x = ifelse(pressure==0, NA, x), y = ifelse(pressure==0, NA, y))
+
+  lev = c("Fixation", "Cue", "Target>Holding Fixation ROI", "Target>Waiting",
+          "Target>Target touch", "Eval", "Correct>Delay", "Abort")
+  df$state = factor(df$state, levels = lev)
 
   ## Linearly interpolate to regular grid
   # Create a regular grid
@@ -282,46 +285,27 @@ read_eventide_tracker <- function(fname, Fs = 100) {
     full_join(df %>% group_by(counter_total_trials) %>% nest(), by = "counter_total_trials")
 
   # Interpolate
-  myapprox <- function(x, y, xout) tibble(r = approx(x, y, xout, ties = min, na.rm = FALSE)$y)
+  myapprox <- function(x, y, xout, method = "linear") {
+    tibble(r = approx(x, y, xout, ties = min, na.rm = FALSE, method = method)$y)
+  }
   df2 <- df2 %>%
-    mutate(x = map2(data, t_r, ~myapprox(.x$t, .x$x, .y$t)),
+    mutate(state = map2(data, t_r, ~myapprox(.x$t, as.integer(.x$state), .y$t, method = "constant")),
+           x = map2(data, t_r, ~myapprox(.x$t, .x$x, .y$t)),
            y = map2(data, t_r, ~myapprox(.x$t, .x$y, .y$t)),
            pressure = map2(data, t_r, ~myapprox(.x$t, .x$pressure, .y$t))) %>%
     select(-data) %>%
-    unnest(cols = c(t_r, x, y, pressure), names_sep = "_") %>%
-    rename(t = t_r_t, x = x_r, y = y_r, pressure = pressure_r) %>%
+    unnest(cols = c(t_r, state, x, y, pressure), names_sep = "_") %>%
+    rename(t = t_r_t, state = state_r, x = x_r, y = y_r, pressure = pressure_r) %>%
     mutate(pressure = ifelse(is.na(x), 0, pressure))
 
-  # ## Reset NAs, R version 4 approx allows leaving NAs, might be easier to upgrade...
-  # df <- df %>% mutate(id = row_number())
-  # # Find liftoffs
-  # temp <- df %>%
-  #   group_by(counter_total_trials) %>%
-  #   filter((pressure == 0)) %>%
-  #   select(counter_total_trials, id)
-  # # List of NA positions, plus immediately following row number, which indicates
-  # # subsequent contact with touchscreen
-  # idu = unique(sort(c(temp$id, temp$id + 1)))
-  #
-  # # Gather start and end times of liftoffs
-  # nat <- df %>% filter(id %in% idu) %>%
-  #   mutate(d = c(1, diff(id))) %>% # 1 indicates sequential frames
-  #   mutate(d = ifelse(d > 1, 0, 1)) %>% # set non-sequential to 0, subsequent contact
-  #   mutate(d2 = 1 + cumsum(1-d)) %>% # incrementing counter of unique liftoffs
-  #   group_by(counter_total_trials, d2) %>%
-  #   summarise(start = first(t), end = last(t), .groups = "drop") %>%
-  #   pivot_longer(cols = c(start, end))
-  #
-  # ind <- findInterval(df2$t, nat$value)
-  # ind <- ifelse((ind %% 2) == 0, FALSE, TRUE)
-  #
-  # df2$x[ind] <- NA
-  # df2$y[ind] <- NA
-  # df2$pressure[ind] <- 0
+  df2$state <- factor(df2$state, labels = lev)
 
   out$Fs <- Fs
   out$tracker_data <- df2
-  out$df <- df
+  #out$df <- df
+
+  class(out) <- "GNGeventide_tracker"
+
   return(out)
 }
 
