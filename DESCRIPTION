@@ -17,7 +17,8 @@ Imports:
     dplyr,
     purrr,
     lme4,
-    emmeans
+    emmeans,
+    zoo
 License: What license is it under?
 Encoding: UTF-8
 LazyData: true

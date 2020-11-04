@@ -53,6 +53,10 @@ read_eventide_multi <- function(name,
   return(out)
 }
 
+summary <- function(x) {
+  UseMethod("summary", x)
+}
+
 summary.GNGeventide_multi <- function(obj,
                                       skim_func = NULL, # see skimr::skim_with
                                       summarise_durations = FALSE
