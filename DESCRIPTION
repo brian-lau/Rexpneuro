@@ -18,7 +18,10 @@ Imports:
     purrr,
     lme4,
     emmeans,
+    matrixStats,
+    ggplot2,
     zoo
 License: What license is it under?
 Encoding: UTF-8
 LazyData: true
+RoxygenNote: 7.1.1

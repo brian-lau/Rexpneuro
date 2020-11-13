@@ -1,17 +1,23 @@
 # Allow wild-card searches, or date restrictions
+#' @export
 read_eventide_multi <- function(name,
                                 basedir = getwd(),
                                 start_date = "30012017", # daymonthyear
                                 end_date = "30012021",   # daymonthyear
-                                min_trials = 1
+                                min_trials = 1,
+                                include_tracker = FALSE
 ) {
   library(dplyr)
 
+  ## Eventide trial data
   fnames <- list.files(path = basedir, pattern =
                          glob2rx(paste0(name, "_", "GNG", "*.txt")))
 
   d <- purrr::map_chr(stringr::str_split(fnames,"_"), 3)
-  d <- as.POSIXlt(d,  format = "%d%m%Y", tz = "Europe/Paris")
+  t <- purrr::map_chr(stringr::str_split(fnames,"_"), 4)
+  t <- purrr::map_chr(stringr::str_split(t,".txt"), 1)
+  d <- as.POSIXct(paste(d, t),
+                  "%d%m%Y %H-%M", tz = "Europe/Paris")
 
   # Sort by ascending experiment date
   ind <- order(d)
@@ -20,9 +26,26 @@ read_eventide_multi <- function(name,
 
   start_date <- as.POSIXlt(start_date, format = "%d%m%Y", tz = "Europe/Paris")
   end_date <- as.POSIXlt(end_date, format = "%d%m%Y", tz = "Europe/Paris")
-
   ind <- (start_date <= d) & (d <= end_date)
+  fnames <- fnames[ind]
+  d <- d[ind]
 
+  ## Eventide tracker data
+  if (include_tracker) {
+    td <- parse_tracker_filenames(basedir = basedir)
+    dt <- difftime(d, td$date, units = "secs")
+
+    # Find index for matching tracker file by time difference
+    dt = t(matrix(unlist(purrr::map(d, ~(abs(difftime(.x, td$date, units = "secs"))))), ncol = length(d)))
+    mind <- which(dt==matrixStats::rowMins(dt),arr.ind=T)
+    #map_int(d, ~which.min(abs(difftime(.x, td$date, units = "secs"))))
+    dt <- dt[mind]
+
+    td$fnames <- td$fnames[mind[,2]]
+    td$date <- td$date[mind[,2]]
+    td$dt <- dt
+  }
+browser()
   if (!any(ind)) {
     out <- list(
       call = match.call(),
@@ -35,17 +58,35 @@ read_eventide_multi <- function(name,
     )
   } else {
     # Read session data
-    dat <- purrr::map(fnames[ind], read_eventide)
+    dat <- purrr::map(fnames, read_eventide)
+
+    if (include_tracker) {
+      dat_tracker <- purrr::map(td$fnames, read_eventide_tracker)
+      date_tracker <- td$date
+      fname_tracker <- td$fnames
+      tracker_data <- purrr::map_dfr(dat_tracker, "tracker_data", .id = "session")
+    } else {
+      date_tracker <- NULL
+      fname_tracker <- NULL
+      tracker_data <- NULL
+      dt <- NULL
+    }
 
     out <- list(
       call = match.call(),
       name = name,
       n_session = sum(ind),
       date = unlist(purrr::map(dat, "date") %>% purrr::reduce(c)),
-      fname = fnames[ind],
+      fname = fnames,
       version = purrr::map_chr(dat, "version"),
-      trial_data = purrr::map_dfr(dat, "trial_data", .id = "session")
+      trial_data = purrr::map_dfr(dat, "trial_data", .id = "session"),
+      data_tracker = date_tracker,
+      dt = dt,
+      fname_tracker = fname_tracker,
+      tracker_data = tracker_data
     )
+
+    #temp = trial_data %>% nest_join(tracker_data)
   }
 
   class(out) <- "GNGeventide_multi"
@@ -53,10 +94,7 @@ read_eventide_multi <- function(name,
   return(out)
 }
 
-summary <- function(x) {
-  UseMethod("summary", x)
-}
-
+#' @export
 summary.GNGeventide_multi <- function(obj,
                                       skim_func = NULL, # see skimr::skim_with
                                       summarise_durations = FALSE
@@ -68,7 +106,7 @@ summary.GNGeventide_multi <- function(obj,
   print(obj$call)
   cat("Name:\t\t", obj$name, "\n")
   cat("# sessions:\t", obj$n_session, "\n")
-  cat("# trials:\t", nrow(out$trial_data), "\n")
+  cat("# trials:\t", nrow(obj$trial_data), "\n")
 
   if (is.null(skim_func)) {
     skim_func <- skim_with(
@@ -108,6 +146,7 @@ summary.GNGeventide_multi <- function(obj,
 
 }
 
+#' @export
 read_eventide <- function(fname) {
   library(dplyr)
   library(readr)
@@ -173,7 +212,7 @@ read_eventide <- function(fname) {
     relocate(mt, .after = rt2)
 
   # set factor levels of trial_result_str, condition_name, direction
-  levels(df$block) <- c("contr", "mixed")
+  levels(df$block) <- c("con", "mix")
 
   df$condition_name[df$condition_name=="Go"] = "go"
   df$condition_name[df$condition_name=="Go control"] = "go_control"
@@ -181,7 +220,8 @@ read_eventide <- function(fname) {
   df <- df %>%
     tibble::add_column(condition = factor(df$condition_name,
                                           levels = c("go_control", "go", "nogo")),
-                       .after = "condition_name")
+                       .after = "condition_name") %>%
+    select(-condition_name)
 
   df$trial_result_str[df$trial_result_str=="target touch"] = "target_touch"
   df$trial_result_str[df$trial_result_str=="fixation holding"] = "fixation_holding"
@@ -212,6 +252,7 @@ read_eventide <- function(fname) {
   return(out)
 }
 
+#' @export
 read_eventide_tracker <- function(fname, Fs = 100) {
   library(dplyr)
   library(tidyr)
@@ -235,7 +276,7 @@ read_eventide_tracker <- function(fname, Fs = 100) {
 
   ## Read data
   ct <- readr::cols_only(
-    `User Field` = col_double(),
+    `User Field` = col_integer(),
     `Current Event` = col_character(),
     `EventIDE TimeStamp` = col_double(),
     `Gaze CVX` = col_double(),
@@ -300,13 +341,12 @@ read_eventide_tracker <- function(fname, Fs = 100) {
     select(-data) %>%
     unnest(cols = c(t_r, state, x, y, pressure), names_sep = "_") %>%
     rename(t = t_r_t, state = state_r, x = x_r, y = y_r, pressure = pressure_r) %>%
-    mutate(pressure = ifelse(is.na(x), 0, pressure))
+    mutate(pressure = ifelse(is.na(x), 0, pressure), t = t/1000)
 
   df2$state <- factor(df2$state, labels = lev)
 
   out$Fs <- Fs
-  out$tracker_data <- df2
-  #out$df <- df
+  out$tracker_data <- df2 %>% ungroup()
 
   class(out) <- "GNGeventide_tracker"
 
@@ -328,4 +368,24 @@ contra_ipsi_tar <- function(x, subject) {
   }
   dir = as.factor(dir)
   return(dir)
+}
+
+#' @export
+parse_tracker_filenames <- function(basedir = getwd()) {
+  fnames <- list.files(path = basedir, pattern =
+                         glob2rx(paste0("TrackerLog--ELOTouchTracker--", "*.txt")))
+
+  d <- purrr::map_chr(stringr::str_split(fnames,"--"), 3)
+  t <- purrr::map_chr(stringr::str_split(fnames,"--"), 4)
+  t <- purrr::map_chr(stringr::str_split(t,".txt"), 1)
+
+  d <- as.POSIXct(paste(d, t),
+                    "%Y-%d-%m %H-%M", tz = "Europe/Paris")
+
+  # Sort by ascending experiment date
+  ind <- order(d)
+  fnames <- fnames[ind]
+  d <- d[ind]
+
+  return(list(fnames = fnames, date = d))
 }
