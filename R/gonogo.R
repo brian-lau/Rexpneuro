@@ -33,7 +33,7 @@ read_eventide_multi <- function(name,
   ## Eventide tracker data
   if (include_tracker) {
     td <- parse_tracker_filenames(basedir = basedir)
-    dt <- difftime(d, td$date, units = "secs")
+    #dt <- difftime(d, td$date, units = "secs")
 
     # Find index for matching tracker file by time difference
     dt = t(matrix(unlist(purrr::map(d, ~(abs(difftime(.x, td$date, units = "secs"))))), ncol = length(d)))
@@ -45,7 +45,7 @@ read_eventide_multi <- function(name,
     td$date <- td$date[mind[,2]]
     td$dt <- dt
   }
-browser()
+
   if (!any(ind)) {
     out <- list(
       call = match.call(),
@@ -311,8 +311,9 @@ read_eventide_tracker <- function(fname, Fs = 100) {
              (state == "Abort")) %>%
     mutate(x = ifelse(pressure==0, NA, x), y = ifelse(pressure==0, NA, y))
 
-  lev = c("Fixation", "Cue", "Target>Holding Fixation ROI", "Target>Waiting",
+  lev <- c("Fixation", "Cue", "Target>Holding Fixation ROI", "Target>Waiting",
           "Target>Target touch", "Eval", "Correct>Delay", "Abort")
+  lev <- lev[lev %in% unique(df$state)]
   df$state = factor(df$state, levels = lev)
 
   ## Linearly interpolate to regular grid
