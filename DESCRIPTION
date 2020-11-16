@@ -15,6 +15,7 @@ Imports:
     janitor,
     skimr,
     dplyr,
+    tidyr,
     purrr,
     lme4,
     emmeans,

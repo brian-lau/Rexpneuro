@@ -31,7 +31,9 @@ read_spike <- function(fname) {
     add_column(counter_total_trials = 1:nrow(spk), .before = 1)
 
   quality <- dat$quality
-  colnames(quality) <- neuron_info$name
+  colnames(quality) <- paste0("q", neuron_info$name)
+  # quality <- as_tibble(quality) %>%
+  #   add_column(counter_total_trials = 1:nrow(spk), .before = 1)
 
   out <- list(
     fname_ephys = session["eFname"],
@@ -53,5 +55,29 @@ read_spike <- function(fname) {
   class(out) <- "GNGspikedata"
 
   return(out)
-
 }
+
+#' @export
+count_in_window <- function(x, t1, t2) {
+  out = lapply(x, function(xx) {length(which((xx>=t1) & (xx<=t2)))})
+  unlist(out)
+}
+
+#' @export
+align_to <- function(x, t) {
+  unlist(x) - t
+}
+
+#normalize <- function(x, )
+#' @export
+count_spks_in_window <- function(df, align = "cue_onset_time") {
+    df2 <- df %>% filter(!is_abort_trial) %>%
+      mutate(across(starts_with("AD"), ~map2(.x, cue_onset_time, ~align_to(.x,.y)))) %>%  # Align to event
+      select(counter_total_trials, starts_with("AD")) %>%
+      pivot_longer(!counter_total_trials) %>%
+      mutate(count = count_in_window(value, t1, t2)) %>%
+      select(-value) %>%
+      left_join(df %>% select(counter_total_trials, condition, rt))
+
+    return(df2)
+  }

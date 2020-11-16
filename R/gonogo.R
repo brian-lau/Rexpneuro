@@ -152,6 +152,7 @@ read_eventide <- function(fname,
                           remove_measured = FALSE,
                           zero_trial_start_time = TRUE
 ) {
+  library(magrittr)
   library(dplyr)
   library(readr)
 
@@ -257,7 +258,7 @@ read_eventide <- function(fname,
   out$trigger_times <- df$define_trial_onset_time
 
   if (zero_trial_start_time) {
-    df %>% mutate(across(ends_with("_onset_time"), ~map2(.x, define_trial_onset_time, ~.x - .y)))
+    df %<>% mutate(across(ends_with("_onset_time"), ~purrr::map2(.x, define_trial_onset_time, ~.x - .y)))
   }
 
   out$trial_data <- df
