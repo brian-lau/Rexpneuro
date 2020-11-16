@@ -1,12 +1,13 @@
-# Allow wild-card searches, or date restrictions
 #' @export
 read_eventide_multi <- function(name,
                                 basedir = getwd(),
                                 start_date = "30012017", # daymonthyear
                                 end_date = "30012021",   # daymonthyear
                                 min_trials = 1,
-                                include_tracker = FALSE
+                                include_tracker = FALSE,
+                                ...
 ) {
+  library(magrittr)
   library(dplyr)
 
   ## Eventide trial data
@@ -58,7 +59,7 @@ read_eventide_multi <- function(name,
     )
   } else {
     # Read session data
-    dat <- purrr::map(fnames, read_eventide)
+    dat <- purrr::map(fnames, read_eventide, ...)
 
     if (include_tracker) {
       dat_tracker <- purrr::map(td$fnames, read_eventide_tracker)
@@ -147,7 +148,10 @@ summary.GNGeventide_multi <- function(obj,
 }
 
 #' @export
-read_eventide <- function(fname) {
+read_eventide <- function(fname,
+                          remove_measured = FALSE,
+                          zero_trial_start_time = TRUE
+) {
   library(dplyr)
   library(readr)
 
@@ -244,6 +248,17 @@ read_eventide <- function(fname) {
                                                      "err_overall_too_late"
                                                      )),
                        .after = "trial_result_str")
+
+  df$cue_duration_programmed <- df$cue_duration
+  df$cue_duration <- df$measured_cue_duration
+
+  if (remove_measured) df %<>% select(-starts_with("measured"))
+
+  out$trigger_times <- df$define_trial_onset_time
+
+  if (zero_trial_start_time) {
+    df %>% mutate(across(ends_with("_onset_time"), ~map2(.x, define_trial_onset_time, ~.x - .y)))
+  }
 
   out$trial_data <- df
 
