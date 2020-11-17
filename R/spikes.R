@@ -7,6 +7,7 @@ read_spike <- function(fname) {
   dat <- R.matlab::readMat(fname)
 
   ## Neuron info
+  # http://lukaspuettmann.com/2017/03/13/matlab-struct-to-r-dataframe/
   varNames    <- names(dat$neuron.info[,,1])
   datList     <- dat$neuron.info
   temp = (t(matrix(unlist(datList), nrow = length(varNames))))
@@ -37,7 +38,7 @@ read_spike <- function(fname) {
 
   out <- list(
     fname_ephys = session["eFname"],
-    fname_eventide = session["bFname"],
+    fname_eventide = session["bFname"], # This comes from excel table
     fname_vicon = session["vFname"],
     trigger = as.logical(session["trigger"]),
     trigger_timestamps = as.vector(dat$event.timestamps),
@@ -56,6 +57,12 @@ read_spike <- function(fname) {
 
   return(out)
 }
+
+# merge.GNGspikedata <- function() {
+# # use eventide filename to find and load spikes
+#
+#   class(out) <- "GNGmerged"
+# }
 
 #' @export
 count_in_window <- function(x, t1, t2) {

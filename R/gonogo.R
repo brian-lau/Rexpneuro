@@ -1,5 +1,6 @@
 #' @export
-read_eventide_multi <- function(name,
+read_eventide <- function(fname = NULL,
+                                name = NULL,
                                 basedir = getwd(),
                                 start_date = "30012017", # daymonthyear
                                 end_date = "30012021",   # daymonthyear
@@ -10,9 +11,15 @@ read_eventide_multi <- function(name,
   library(magrittr)
   library(dplyr)
 
-  ## Eventide trial data
-  fnames <- list.files(path = basedir, pattern =
-                         glob2rx(paste0(name, "_", "GNG", "*.txt")))
+  if (is.null(names) & is.null(fname)) stop("Specify subject name or filename.")
+
+  if (!is.null(fname)) {
+    fnames <- fname
+    name <- stringr::str_split(fnames,"_")[[1]][1]
+  } else {
+    fnames <- list.files(path = basedir, pattern =
+                           glob2rx(paste0(name, "_", "GNG", "*.txt")))
+  }
 
   d <- purrr::map_chr(stringr::str_split(fnames,"_"), 3)
   t <- purrr::map_chr(stringr::str_split(fnames,"_"), 4)
@@ -20,6 +27,7 @@ read_eventide_multi <- function(name,
   d <- as.POSIXct(paste(d, t),
                   "%d%m%Y %H-%M", tz = "Europe/Paris")
 
+  ## Eventide trial data
   # Sort by ascending experiment date
   ind <- order(d)
   fnames <- fnames[ind]
@@ -59,7 +67,7 @@ read_eventide_multi <- function(name,
     )
   } else {
     # Read session data
-    dat <- purrr::map(fnames, read_eventide, ...)
+    dat <- purrr::map(fnames, read_eventide_single, ...)
 
     if (include_tracker) {
       dat_tracker <- purrr::map(td$fnames, read_eventide_tracker)
@@ -90,15 +98,15 @@ read_eventide_multi <- function(name,
     #temp = trial_data %>% nest_join(tracker_data)
   }
 
-  class(out) <- "GNGeventide_multi"
+  class(out) <- "GNGeventide"
 
   return(out)
 }
 
 #' @export
-summary.GNGeventide_multi <- function(obj,
-                                      skim_func = NULL, # see skimr::skim_with
-                                      summarise_durations = FALSE
+summary.GNGeventide <- function(obj,
+                                skim_func = NULL, # see skimr::skim_with
+                                summarise_durations = FALSE
 ) {
   library(dplyr)
   library(skimr)
@@ -148,7 +156,7 @@ summary.GNGeventide_multi <- function(obj,
 }
 
 #' @export
-read_eventide <- function(fname,
+read_eventide_single <- function(fname,
                           remove_measured = FALSE,
                           zero_trial_start_time = TRUE
 ) {
@@ -263,7 +271,7 @@ read_eventide <- function(fname,
 
   out$trial_data <- df
 
-  class(out) <- "GNGeventide"
+  class(out) <- "GNGeventide_single"
 
   return(out)
 }
