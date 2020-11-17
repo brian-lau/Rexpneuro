@@ -1,12 +1,13 @@
 #' @export
 read_eventide <- function(fname = NULL,
-                                name = NULL,
-                                basedir = getwd(),
-                                start_date = "30012017", # daymonthyear
-                                end_date = "30012021",   # daymonthyear
-                                min_trials = 1,
-                                include_tracker = FALSE,
-                                ...
+                          name = NULL,
+                          basedir = getwd(),
+                          start_date = "30012017", # daymonthyear
+                          end_date = "30012021",   # daymonthyear
+                          min_trials = 1,
+                          include_tracker = FALSE,
+                          include_spike = FALSE,
+                          ...
 ) {
   library(magrittr)
   library(dplyr)
@@ -60,14 +61,21 @@ read_eventide <- function(fname = NULL,
       call = match.call(),
       name = name,
       n_session = 0,
-      date = NULL,
-      fname = NULL,
-      version = NULL,
+      #date = NULL,
+      #fname = NULL,
+      #version = NULL,
+      info = NULL,
       trial_data = NULL
     )
   } else {
     # Read session data
     dat <- purrr::map(fnames, read_eventide_single, ...)
+    trial_data = purrr::map_dfr(dat, "trial_data", .id = "session")
+    #id_session = unique(trial_data$session)
+    info <- tibble::tibble(session = unique(trial_data$session),
+                   date = unlist(purrr::map(dat, "date") %>% purrr::reduce(c)),
+                   fname_eventide = fnames,
+                   version = purrr::map_chr(dat, "version"))
 
     if (include_tracker) {
       dat_tracker <- purrr::map(td$fnames, read_eventide_tracker)
@@ -85,11 +93,12 @@ read_eventide <- function(fname = NULL,
       call = match.call(),
       name = name,
       n_session = sum(ind),
-      date = unlist(purrr::map(dat, "date") %>% purrr::reduce(c)),
-      fname = fnames,
-      version = purrr::map_chr(dat, "version"),
-      trial_data = purrr::map_dfr(dat, "trial_data", .id = "session"),
-      data_tracker = date_tracker,
+      #date = unlist(purrr::map(dat, "date") %>% purrr::reduce(c)),
+      #fname = fnames,
+      #version = purrr::map_chr(dat, "version"),
+      info = info,
+      trial_data = trial_data,
+      date_tracker = date_tracker,
       dt = dt,
       fname_tracker = fname_tracker,
       tracker_data = tracker_data

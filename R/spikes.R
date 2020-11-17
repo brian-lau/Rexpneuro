@@ -40,7 +40,7 @@ read_spike <- function(fname) {
     fname_ephys = session["eFname"],
     fname_eventide = session["bFname"], # This comes from excel table
     fname_vicon = session["vFname"],
-    trigger = as.logical(session["trigger"]),
+    trigger = session["trigger"],
     trigger_timestamps = as.vector(dat$event.timestamps),
     artifact = as.logical(session["artifact"]),
     target = session["target"],
