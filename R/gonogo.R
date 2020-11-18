@@ -61,9 +61,6 @@ read_eventide <- function(fname = NULL,
       call = match.call(),
       name = name,
       n_session = 0,
-      #date = NULL,
-      #fname = NULL,
-      #version = NULL,
       info = NULL,
       trial_data = NULL
     )
@@ -71,39 +68,45 @@ read_eventide <- function(fname = NULL,
     # Read session data
     dat <- purrr::map(fnames, read_eventide_single, ...)
     trial_data = purrr::map_dfr(dat, "trial_data", .id = "session")
-    #id_session = unique(trial_data$session)
     info <- tibble::tibble(session = unique(trial_data$session),
-                   date = unlist(purrr::map(dat, "date") %>% purrr::reduce(c)),
-                   fname_eventide = fnames,
-                   version = purrr::map_chr(dat, "version"))
+                           version = purrr::map_chr(dat, "version"),
+                           date = unlist(purrr::map(dat, "date") %>% purrr::reduce(c)),
+                           fname_eventide = fnames
+    )
 
     if (include_tracker) {
       dat_tracker <- purrr::map(td$fnames, read_eventide_tracker)
-      date_tracker <- td$date
-      fname_tracker <- td$fnames
       tracker_data <- purrr::map_dfr(dat_tracker, "tracker_data", .id = "session")
+      info %<>% tibble::add_column(date_tracker = td$date,
+                                   fname_tracker = td$fnames,
+                                   dt = dt
+      )
+
+      # Remove extra tracker data (from session terminating before trial_data written)
+      tracker_data %<>% group_by(session, counter_total_trials) %>%
+        nest() %>% semi_join(trial_data, by = c("session", "counter_total_trials"))
+
+      # Convert to trial time
+      if ("define_trial_onset_time_absolute" %in% names(trial_data)) {
+        tracker_data$define_trial_onset_time_absolute = trial_data$define_trial_onset_time_absolute
+        f <- function(df, t0) {
+          df$t <- df$t - t0
+          return(df)
+        }
+        tracker_data %<>% mutate(data = map(data, ~f(.x, define_trial_onset_time_absolute)))
+      }
     } else {
-      date_tracker <- NULL
-      fname_tracker <- NULL
       tracker_data <- NULL
-      dt <- NULL
     }
 
     out <- list(
       call = match.call(),
       name = name,
       n_session = sum(ind),
-      #date = unlist(purrr::map(dat, "date") %>% purrr::reduce(c)),
-      #fname = fnames,
-      #version = purrr::map_chr(dat, "version"),
       info = info,
       trial_data = trial_data,
-      date_tracker = date_tracker,
-      dt = dt,
-      fname_tracker = fname_tracker,
       tracker_data = tracker_data
     )
-
     #temp = trial_data %>% nest_join(tracker_data)
   }
 
@@ -275,6 +278,7 @@ read_eventide_single <- function(fname,
   out$trigger_times <- df$define_trial_onset_time
 
   if (zero_trial_start_time) {
+    df %<>% mutate(define_trial_onset_time_absolute = define_trial_onset_time, .before = define_trial_onset_time)
     df %<>% mutate(across(ends_with("_onset_time"), ~purrr::map2(.x, define_trial_onset_time, ~.x - .y)))
   }
 
