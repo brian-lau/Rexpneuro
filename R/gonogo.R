@@ -61,7 +61,7 @@ read_eventide <- function(fname = NULL,
     out <- list(
       call = match.call(),
       name = name,
-      n_session = 0,
+      #n_session = 0,
       info = NULL,
       trial_data = NULL
     )
@@ -103,7 +103,7 @@ read_eventide <- function(fname = NULL,
     out <- list(
       call = match.call(),
       name = name,
-      n_session = sum(ind),
+      #n_session = sum(ind),
       info = info,
       trial_data = trial_data,
       tracker_data = tracker_data
@@ -127,7 +127,7 @@ summary.GNGeventide <- function(obj,
   cat("Call: ")
   print(obj$call)
   cat("Name:\t\t", obj$name, "\n")
-  cat("# sessions:\t", obj$n_session, "\n")
+  cat("# sessions:\t", nrow(obj$info), "\n")
   cat("# trials:\t", nrow(obj$trial_data), "\n")
 
   if (is.null(skim_func)) {
