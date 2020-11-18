@@ -18,8 +18,9 @@ read_eventide <- function(fname = NULL,
     fnames <- fname
     name <- stringr::str_split(fnames,"_")[[1]][1]
   } else {
-    fnames <- list.files(path = basedir, pattern =
-                           glob2rx(paste0(name, "_", "GNG", "*.txt")))
+    fnames <- list.files(path = basedir,
+                         pattern = glob2rx(paste0(name, "_", "GNG", "*.txt")),
+                         ignore.case = TRUE)
   }
 
   d <- purrr::map_chr(stringr::str_split(fnames,"_"), 3)
