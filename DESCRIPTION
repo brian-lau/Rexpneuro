@@ -15,12 +15,14 @@ Imports:
     janitor,
     skimr,
     dplyr,
+    magrittr,
     tidyr,
     purrr,
     lme4,
     emmeans,
     matrixStats,
     ggplot2,
+    R.matlab,
     zoo
 License: What license is it under?
 Encoding: UTF-8

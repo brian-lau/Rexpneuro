@@ -33,8 +33,8 @@ read_spike <- function(fname) {
 
   quality <- dat$quality
   colnames(quality) <- paste0("q", neuron_info$name)
-  # quality <- as_tibble(quality) %>%
-  #   add_column(counter_total_trials = 1:nrow(spk), .before = 1)
+  quality <- as_tibble(quality) %>%
+    add_column(counter_total_trials = 1:nrow(spk), .before = 1)
 
   session_info <- tibble::tibble(fname_ephys = session["eFname"],
                                  fname_eventide = session["bFname"],
@@ -47,18 +47,8 @@ read_spike <- function(fname) {
                                  )
 
   out <- list(
-    #fname_ephys = session["eFname"],
-    #fname_eventide = session["bFname"], # This comes from excel table
-    #fname_vicon = session["vFname"],
-    #trigger = session["trigger"],
     session_info = session_info,
     trigger_timestamps = as.vector(dat$event.timestamps),
-    #artifact = as.logical(session["artifact"]),
-    #target = session["target"],
-    #grid_x = session["grid.x"],
-    #grid_y = session["grid.y"],
-    #tip_depth = as.numeric(session["depth"]),
-    #n_trials = as.numeric(session["n.trials"]),
     neuron_info = neuron_info,
     spktimes = spktimes,
     quality = quality

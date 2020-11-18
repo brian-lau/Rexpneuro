@@ -47,7 +47,7 @@ read_eventide <- function(fname = NULL,
     #dt <- difftime(d, td$date, units = "secs")
 
     # Find index for matching tracker file by time difference
-    dt = t(matrix(unlist(purrr::map(d, ~(abs(difftime(.x, td$date, units = "secs"))))), ncol = length(d)))
+    dt <- t(matrix(unlist(purrr::map(d, ~(abs(difftime(.x, td$date, units = "secs"))))), ncol = length(d)))
     mind <- which(dt==matrixStats::rowMins(dt),arr.ind=T)
     #map_int(d, ~which.min(abs(difftime(.x, td$date, units = "secs"))))
     dt <- dt[mind]
@@ -61,7 +61,6 @@ read_eventide <- function(fname = NULL,
     out <- list(
       call = match.call(),
       name = name,
-      #n_session = 0,
       info = NULL,
       trial_data = NULL
     )
@@ -103,7 +102,6 @@ read_eventide <- function(fname = NULL,
     out <- list(
       call = match.call(),
       name = name,
-      #n_session = sum(ind),
       info = info,
       trial_data = trial_data,
       tracker_data = tracker_data
@@ -187,7 +185,7 @@ read_eventide_single <- function(fname,
   ind <- hdr_txt[,2] != ""
   hdr_txt <- hdr_txt[ind, ]
 
-  out = list(
+  out <- list(
     name = hdr_txt[5,2],
     date = as.POSIXct(paste0(hdr_txt[3,2], " ", hdr_txt[4,2], ":", hdr_txt[4,3]),
                       "%d/%m/%Y %H:%M", tz = "Europe/Paris"),
@@ -210,15 +208,15 @@ read_eventide_single <- function(fname,
 
   df <- readr::read_csv2(fname, col_names = TRUE, col_types = ct, skip = 8, locale(decimal_mark = ","))
 
-  df <- df %>%
-    janitor::remove_empty(which = "cols") %>%
+  df %<>% janitor::remove_empty(which = "cols") %>%
     janitor::clean_names()
 
+  # Movement time
   df$mt <- df$tt - df$rt
+
+  # Fill in cue set index for sessions with only one
   if (!("cue_set_index" %in% colnames(df))) {
-    df <- df %>%
-      tibble::add_column(cue_set_index = 0,
-                                        .after = "block_index")
+    df %<>% tibble::add_column(cue_set_index = 0, .after = "block_index")
   }
 
   cnames <- colnames(df)
@@ -229,8 +227,7 @@ read_eventide_single <- function(fname,
   tvars <- c(tvars, cnames[stringr::str_ends(cnames, "_duration")],
              cnames[stringr::str_ends(cnames, "_time")])
 
-  df <- df %>%
-    mutate_at(which(cnames %in% tvars), msec_to_sec) %>%
+  df %<>% mutate_at(which(cnames %in% tvars), msec_to_sec) %>%
     tibble::add_column(direction = contra_ipsi_tar(df$tar_x, tolower(out$name)),
                        .after = "cue_set_index") %>%
     tibble::add_column(block = as.factor(df$block_index),
@@ -241,12 +238,11 @@ read_eventide_single <- function(fname,
   levels(df$block) <- c("con", "mix")
 
   df$condition_name[df$condition_name=="Go"] = "go"
-  df$condition_name[df$condition_name=="Go control"] = "go_control"
+  df$condition_name[df$condition_name=="Go control"] = "go_con"
   df$condition_name[df$condition_name=="Nogo"] = "nogo"
-  df <- df %>%
-    tibble::add_column(condition = factor(df$condition_name,
-                                          levels = c("go_control", "go", "nogo")),
-                       .after = "condition_name") %>%
+  df %<>% tibble::add_column(condition = factor(df$condition_name,
+                                                levels = c("go_con", "go", "nogo")),
+                             .after = "condition_name") %>%
     select(-condition_name)
 
   df$trial_result_str[df$trial_result_str=="target touch"] = "target_touch"
@@ -258,29 +254,28 @@ read_eventide_single <- function(fname,
   df$trial_result_str[df$trial_result_str=="Anticipation"] = "err_anticipation"
   df$trial_result_str[df$trial_result_str=="Early target release"] = "err_early_target_release"
 
-  df <- df %>%
-    tibble::add_column(event = factor(df$trial_result_str,
-                                          levels = c("fixation_holding",
-                                                     "target_touch",
-                                                     "err_anticipation",
-                                                     "err_cue_touch_aborted",
-                                                     "err_late_retouch",
-                                                     "err_elsewhere_touch",
-                                                     "err_early_target_release",
-                                                     "err_overall_too_late"
-                                                     )),
-                       .after = "trial_result_str")
+  df %<>% tibble::add_column(event = factor(df$trial_result_str,
+                                            levels = c("fixation_holding",
+                                                       "target_touch",
+                                                       "err_anticipation",
+                                                       "err_cue_touch_aborted",
+                                                       "err_late_retouch",
+                                                       "err_elsewhere_touch",
+                                                       "err_early_target_release",
+                                                       "err_overall_too_late"
+                                            )),
+                             .after = "trial_result_str")
 
   df$cue_duration_programmed <- df$cue_duration
   df$cue_duration <- df$measured_cue_duration
 
   if (remove_measured) df %<>% select(-starts_with("measured"))
 
-  out$trigger_times <- df$define_trial_onset_time
+  #out$trigger_times <- df$define_trial_onset_time
 
   if (zero_trial_start_time) {
     df %<>% mutate(define_trial_onset_time_absolute = define_trial_onset_time, .before = define_trial_onset_time)
-    df %<>% mutate(across(ends_with("_onset_time"), ~purrr::map2(.x, define_trial_onset_time, ~.x - .y)))
+    df %<>% mutate(across(ends_with("_onset_time"), ~purrr::map2_dbl(.x, define_trial_onset_time, ~.x - .y)))
   }
 
   out$trial_data <- df
@@ -307,7 +302,7 @@ read_eventide_tracker <- function(fname, Fs = 100) {
   ind <- hdr_txt[,2] != ""
   hdr_txt <- hdr_txt[ind, ]
 
-  out = list(
+  out <- list(
     date = as.POSIXct(hdr_txt[1,2], "%Y.%d.%m%H:%M", tz = "Europe/Paris"),
     version = hdr_txt[2,2]
   )
@@ -317,9 +312,9 @@ read_eventide_tracker <- function(fname, Fs = 100) {
     `User Field` = col_integer(),
     `Current Event` = col_character(),
     `EventIDE TimeStamp` = col_double(),
-    `Gaze CVX` = col_double(),
+    `Gaze CVX` = col_double(), # degrees
     `Gaze CVY` = col_double(),
-    #`Gaze X` = col_double(),
+    #`Gaze X` = col_double(), # pixels
     #`Gaze Y` = col_double(),
     Pressure = col_double(),
     #`Is Touch` = col_logical(),
@@ -328,8 +323,7 @@ read_eventide_tracker <- function(fname, Fs = 100) {
 
   df <- readr::read_csv2(fname, col_names = TRUE, col_types = ct, skip = 3, locale(decimal_mark = ","))
 
-  df <- df %>%
-    janitor::remove_empty(which = "cols") %>%
+  df %<>% janitor::remove_empty(which = "cols") %>%
     rename("counter_total_trials" = "User Field",
            "state" = "Current Event",
            "t" = "EventIDE TimeStamp",
@@ -338,45 +332,41 @@ read_eventide_tracker <- function(fname, Fs = 100) {
            "pressure" = "Pressure")
 
 
-  df <- df %>%
-    filter((state == "Fixation") |
-             (state == "Cue") |
-             (state == "Target>Holding Fixation ROI") |
-             (state == "Target>Waiting") |
-             (state == "Target>Target touch") |
-             (state == "Eval") |
-             (state == "Correct>Delay") |
-             (state == "Abort")) %>%
+  df %<>% filter((state == "Fixation") |
+                   (state == "Cue") |
+                   (state == "Target>Holding Fixation ROI") |
+                   (state == "Target>Waiting") |
+                   (state == "Target>Target touch") |
+                   (state == "Eval") |
+                   (state == "Correct>Delay") |
+                   (state == "Abort")) %>%
     mutate(x = ifelse(pressure==0, NA, x), y = ifelse(pressure==0, NA, y))
 
   lev <- c("Fixation", "Cue", "Target>Holding Fixation ROI", "Target>Waiting",
           "Target>Target touch", "Eval", "Correct>Delay", "Abort")
   lev <- lev[lev %in% unique(df$state)]
-  df$state = factor(df$state, levels = lev)
+  df$state <- factor(df$state, levels = lev)
 
   ## Linearly interpolate to regular grid
   # Create a regular grid
   myseq <- function(from,to,by) tibble(t = seq(from, to, by))
-  df2 <- df %>%
-    group_by(counter_total_trials) %>%
+  df2 <- df %>% group_by(counter_total_trials) %>%
     summarise(start = min(t), end = max(t), .groups = "drop") %>%
     group_by(counter_total_trials) %>%
     mutate(t_r = map2(start, end, ~myseq(start, end, 1000/Fs))) %>% # times in msec
     select(-start,-end)
 
   # Join with original data
-  df2 = df2 %>%
-    full_join(df %>% group_by(counter_total_trials) %>% nest(), by = "counter_total_trials")
+  df2 %<>% full_join(df %>% group_by(counter_total_trials) %>% nest(), by = "counter_total_trials")
 
   # Interpolate
   myapprox <- function(x, y, xout, method = "linear") {
     tibble(r = approx(x, y, xout, ties = min, na.rm = FALSE, method = method)$y)
   }
-  df2 <- df2 %>%
-    mutate(state = map2(data, t_r, ~myapprox(.x$t, as.integer(.x$state), .y$t, method = "constant")),
-           x = map2(data, t_r, ~myapprox(.x$t, .x$x, .y$t)),
-           y = map2(data, t_r, ~myapprox(.x$t, .x$y, .y$t)),
-           pressure = map2(data, t_r, ~myapprox(.x$t, .x$pressure, .y$t))) %>%
+  df2 %<>% mutate(state = map2(data, t_r, ~myapprox(.x$t, as.integer(.x$state), .y$t, method = "constant")),
+                  x = map2(data, t_r, ~myapprox(.x$t, .x$x, .y$t)),
+                  y = map2(data, t_r, ~myapprox(.x$t, .x$y, .y$t)),
+                  pressure = map2(data, t_r, ~myapprox(.x$t, .x$pressure, .y$t))) %>%
     select(-data) %>%
     unnest(cols = c(t_r, state, x, y, pressure), names_sep = "_") %>%
     rename(t = t_r_t, state = state_r, x = x_r, y = y_r, pressure = pressure_r) %>%
