@@ -41,6 +41,8 @@ read_matching_spkdata <- function(obj,
 
   # How to check matching trials? Drop in eventide and tracker?
   #spk_data %<>% semi_join(obj$trial_data, by = c("session", "counter_total_trials"))
+  #diff(obj$trial_data$define_trial_onset_time_absolute)
+  #diff(spk_list[[1]]$trigger_timestamps)
 
   info <- purrr::map_dfr(spk_list , "session_info", .id = "session") %>%
     inner_join(purrr::map_dfr(spk_list , "neuron_info", .id = "session") %>% group_by(session) %>% nest(neuron_info = !session)) %>%
