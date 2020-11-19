@@ -1,8 +1,3 @@
-# library(Rexpneuro)
-# setwd("~/ownCloud/behaviordata/data_analyses_Brian/")
-# obj = read_eventide(name = "flocky", include_tracker = T, end_date = "01022018")
-# obj = read_eventide(name = "flocky", include_tracker = T, end_date = "02022018")
-
 #' @export
 read_matched_spike_data <- function(obj,
                           basedir = getwd()
@@ -27,14 +22,11 @@ read_matched_spike_data <- function(obj,
     keep_session = obj$info$session[ind]
     dropped_session <- obj$info %>% filter(!(session %in% keep_session))
     obj$info %<>% filter(session %in% keep_session)
-    #obj$info$session <- as.integer(droplevels(as.factor(obj$info$session)))
     obj$info$session <- as.integer(fct_drop(as_factor(obj$info$session)))
     obj$trial_data %<>% filter(session %in% keep_session)
-    #obj$trial_data$session <- as.integer(droplevels(as.factor(obj$trial_data$session)))
     obj$trial_data$session <- as.integer(fct_drop(as_factor(obj$trial_data$session)))
     if (!is.null(obj$tracker_data)) {
       obj$tracker_data %<>% filter(session %in% keep_session)
-      #obj$tracker_data$session <- as.integer(droplevels(as.factor(obj$tracker_data$session)))
       obj$tracker_data$session <- as.integer(fct_drop(as_factor(obj$tracker_data$session)))
     }
   } else {
@@ -65,9 +57,12 @@ read_matched_spike_data <- function(obj,
 
   # Update info
   info <- purrr::map_dfr(spike_list , "session_info", .id = "session") %>%
-    inner_join(purrr::map_dfr(spike_list , "neuron_info", .id = "session") %>% group_by(session) %>% nest(neuron_info = !session)) %>%
+    inner_join(purrr::map_dfr(spike_list , "neuron_info", .id = "session") %>%
+                 group_by(session) %>%
+                 nest(neuron_info = !session),
+               by = "session") %>%
     mutate(session = as.integer(session))
-  obj$info %<>% inner_join(info)
+  obj$info %<>% inner_join(info, by = c("session", "fname_eventide"))
 
   # Calculate trial durations from eventide (time between define trial state)
   trial_dur_eventide <- obj$trial_data %>%
