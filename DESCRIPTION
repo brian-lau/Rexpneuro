@@ -13,6 +13,7 @@ Imports:
     stringr,
     readr,
     janitor,
+    forcats,
     skimr,
     dplyr,
     magrittr,

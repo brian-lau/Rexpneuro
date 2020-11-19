@@ -32,7 +32,8 @@ read_spike <- function(fname) {
     add_column(counter_total_trials = 1:nrow(spk), .before = 1)
 
   quality <- dat$quality
-  colnames(quality) <- paste0("q", neuron_info$name)
+  #colnames(quality) <- paste0("q", neuron_info$name)
+  colnames(quality) <- neuron_info$name
   quality <- as_tibble(quality) %>%
     add_column(counter_total_trials = 1:nrow(spk), .before = 1)
 
@@ -48,7 +49,7 @@ read_spike <- function(fname) {
 
   out <- list(
     session_info = session_info,
-    trigger_timestamps = as.vector(dat$event.timestamps),
+    trigger_timestamps = tibble(t = as.vector(dat$event.timestamps)),
     neuron_info = neuron_info,
     spktimes = spktimes,
     quality = quality

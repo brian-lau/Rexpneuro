@@ -99,6 +99,10 @@ read_eventide <- function(fname = NULL,
       tracker_data <- NULL
     }
 
+    # info$session <- as.integer(droplevels(as.factor(info$session)))
+    # trial_data$session <- as.integer(droplevels(as.factor(trial_data$session)))
+    # tracker_data$session <- as.integer(droplevels(as.factor(tracker_data$session)))
+
     out <- list(
       call = match.call(),
       name = name,
