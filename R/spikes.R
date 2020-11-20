@@ -73,8 +73,15 @@ count_in_window <- function(x, t1, t2) {
 }
 
 #' @export
-align_to <- function(x, t) {
-  unlist(x) - t
+# align_to <- function(x, t) {
+#   unlist(x) - t
+# }
+align_to <- function(x, group_info) {
+  x %>% unnest(cols = c(neurons)) %>%
+    mutate(across(starts_with("AD"), ~map2(.x, shift, ~.x-.y))) %>%
+    select(-shift) %>%
+    pivot_longer(!counter_total_trials, values_to = "times")
+    #nest(neurons = starts_with("AD")) # re-nest?
 }
 
 #normalize <- function(x, )
