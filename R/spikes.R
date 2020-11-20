@@ -73,9 +73,6 @@ count_in_window <- function(x, t1, t2) {
 }
 
 #' @export
-# align_to <- function(x, t) {
-#   unlist(x) - t
-# }
 align_to <- function(x, group_info) {
   x %>% unnest(cols = c(neurons)) %>%
     mutate(across(starts_with("AD"), ~map2(.x, shift, ~.x-.y))) %>%
@@ -84,7 +81,13 @@ align_to <- function(x, group_info) {
     #nest(neurons = starts_with("AD")) # re-nest?
 }
 
-#normalize <- function(x, )
+#' @export
+add_covariates <- function(x, group_info, y) {
+  x %>% left_join(y %>% filter(session == group_info$session),
+                  by = c("session", "counter_total_trials")) %>%
+    select(-session)
+}
+
 #' @export
 count_spks_in_window <- function(df, align = "cue_onset_time") {
     df2 <- df %>% filter(!is_abort_trial) %>%
