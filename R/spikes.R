@@ -60,12 +60,6 @@ read_spike <- function(fname) {
   return(out)
 }
 
-# merge.GNGspikedata <- function() {
-# # use eventide filename to find and load spikes
-#
-#   class(out) <- "GNGmerged"
-# }
-
 #' @export
 count_in_window <- function(x, t1, t2) {
   out = lapply(x, function(xx) {length(which((xx>=t1) & (xx<=t2)))})
@@ -74,6 +68,7 @@ count_in_window <- function(x, t1, t2) {
 
 #' @export
 align_to <- function(x, group_info) {
+  library(purrr)
   x %>% unnest(cols = c(neurons)) %>%
     mutate(across(starts_with("AD"), ~map2(.x, shift, ~.x-.y))) %>%
     select(-shift) %>%
@@ -90,13 +85,14 @@ add_covariates <- function(x, group_info, y) {
 
 #' @export
 count_spks_in_window <- function(df, align = "cue_onset_time") {
-    df2 <- df %>% filter(!is_abort_trial) %>%
-      mutate(across(starts_with("AD"), ~map2(.x, cue_onset_time, ~align_to(.x,.y)))) %>%  # Align to event
-      select(counter_total_trials, starts_with("AD")) %>%
-      pivot_longer(!counter_total_trials) %>%
-      mutate(count = count_in_window(value, t1, t2)) %>%
-      select(-value) %>%
-      left_join(df %>% select(counter_total_trials, condition, rt))
+  library(purrr)
+  df2 <- df %>% filter(!is_abort_trial) %>%
+    mutate(across(starts_with("AD"), ~map2(.x, cue_onset_time, ~align_to(.x,.y)))) %>%  # Align to event
+    select(counter_total_trials, starts_with("AD")) %>%
+    pivot_longer(!counter_total_trials) %>%
+    mutate(count = count_in_window(value, t1, t2)) %>%
+    select(-value) %>%
+    left_join(df %>% select(counter_total_trials, condition, rt))
 
-    return(df2)
-  }
+  return(df2)
+}

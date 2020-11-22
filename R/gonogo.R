@@ -146,25 +146,25 @@ summary.GNGeventide <- function(obj,
 
   x <- obj$trial_data %>%
     group_by(condition) %>%
-    skim_func(is_correct_trial, is_abort_trial)
+    skim_func(is_correct, is_abort)
   print(x, include_summary = FALSE, width = NULL)
 
   x <- obj$trial_data %>%
     group_by(block) %>%
-    skim_func(is_correct_trial, is_abort_trial)
+    skim_func(is_correct, is_abort)
   print(x, include_summary = FALSE, width = NULL)
 
   cat("\nFilter by correct trials")
   x <- obj$trial_data %>%
     group_by(block) %>%
-    filter(is_correct_trial & (condition != "nogo")) %>%
+    filter(is_correct & (condition != "nogo")) %>%
     skim_func(counter_total_trials, counter_trials_in_block, rt, mt)
   print(x, include_summary = FALSE, width = NULL)
 
   if (summarise_durations) {
-    ind = stringr::str_detect(names(out$trial_data), "^measured")
+    ind = stringr::str_detect(names(obj$trial_data), "^measured")
     x <- obj$trial_data %>%
-      skim_func(names(out$trial_data)[stringr::str_detect(names(out$trial_data), "^measured")])
+      skim_func(names(obj$trial_data)[stringr::str_detect(names(obj$trial_data), "^measured")])
     print(x, include_summary = FALSE, width = NULL)
   }
 
@@ -225,6 +225,9 @@ read_eventide_single <- function(fname,
 
   cnames <- colnames(df)
 
+  df %<>% rename(cueset = cue_set_index) %>%
+    mutate(cueset = factor(cueset, levels = c(0,1), labels = c("old", "new")))
+
   # convert time to seconds
   msec_to_sec <- function(x, na.rm = FALSE) (x/1000)
   tvars <- c("rt", "rt2", "tt", "mt", "reward_delay")
@@ -233,7 +236,7 @@ read_eventide_single <- function(fname,
 
   df %<>% mutate_at(which(cnames %in% tvars), msec_to_sec) %>%
     tibble::add_column(direction = contra_ipsi_tar(df$tar_x, tolower(out$name)),
-                       .after = "cue_set_index") %>%
+                       .after = "cueset") %>%
     tibble::add_column(block = as.factor(df$block_index),
                        .after = "block_index") %>%
     relocate(mt, .after = rt2)
@@ -246,8 +249,13 @@ read_eventide_single <- function(fname,
   df$condition_name[df$condition_name=="Nogo"] = "nogo"
   df %<>% tibble::add_column(condition = factor(df$condition_name,
                                                 levels = c("go_con", "go", "nogo")),
-                             .after = "condition_name") %>%
-    select(-condition_name)
+                             .after = "condition_name")
+  df$condition_name[df$condition_name=="go_con"] = "go"
+  df %<>% rename(gng = condition_name) %>%
+    mutate(gng = factor(gng, levels = c("go", "nogo")))
+
+  df %<>% rename(is_correct = is_correct_trial, is_incorrect = is_incorrect_trial,
+                 is_abort = is_abort_trial, is_repeat = is_repeat_trial)
 
   df$trial_result_str[df$trial_result_str=="target touch"] = "target_touch"
   df$trial_result_str[df$trial_result_str=="fixation holding"] = "fixation_holding"
@@ -274,8 +282,6 @@ read_eventide_single <- function(fname,
   df$cue_duration <- df$measured_cue_duration
 
   if (remove_measured) df %<>% select(-starts_with("measured"))
-
-  #out$trigger_times <- df$define_trial_onset_time
 
   if (zero_trial_start_time) {
     df %<>% mutate(define_trial_onset_time_absolute = define_trial_onset_time, .before = define_trial_onset_time)
