@@ -355,7 +355,7 @@ read_eventide_tracker <- function(fname, Fs = 100) {
 
   ## Linearly interpolate to regular grid
   # Create a regular grid
-  myseq <- function(from,to,by) tibble(t = seq(from, to, by))
+  myseq <- function(from, to, by) tibble(t = seq(from, to, by))
   df2 <- df %>% group_by(counter_total_trials) %>%
     summarise(start = min(t), end = max(t), .groups = "drop") %>%
     group_by(counter_total_trials) %>%

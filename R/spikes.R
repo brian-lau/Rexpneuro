@@ -25,14 +25,13 @@ read_spike <- function(fname) {
 
   spk = matrix(dat$times, ncol = length(neuron_info$name))
   colnames(spk) <- neuron_info$name
+  f <- function(x) unlist(x, use.names = F)
+  spk <- apply(spk, c(1, 2), f)
 
-  f <- function(x) as.vector(unlist(x))
-  spk <- apply(spk, c(1,2), f)
   spktimes <- as_tibble(spk) %>%
     add_column(counter_total_trials = 1:nrow(spk), .before = 1)
 
   quality <- dat$quality
-  #colnames(quality) <- paste0("q", neuron_info$name)
   colnames(quality) <- neuron_info$name
   quality <- as_tibble(quality) %>%
     add_column(counter_total_trials = 1:nrow(spk), .before = 1)
