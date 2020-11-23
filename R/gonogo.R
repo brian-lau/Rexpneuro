@@ -66,7 +66,7 @@ read_eventide <- function(fname = NULL,
     )
   } else {
     # Read session data
-    dat <- purrr::map(fnames, read_eventide_single, ...)
+    dat <- purrr::map(paste(basedir, fnames, sep = .Platform$file.sep), read_eventide_single, ...)
     trial_data = purrr::map_dfr(dat, "trial_data", .id = "session")
     info <- tibble::tibble(session = unique(trial_data$session),
                            version = purrr::map_chr(dat, "version"),
@@ -75,7 +75,7 @@ read_eventide <- function(fname = NULL,
     )
 
     if (include_tracker) {
-      dat_tracker <- purrr::map(td$fnames, read_eventide_tracker)
+      dat_tracker <- purrr::map(paste(basedir, td$fnames, sep = .Platform$file.sep), read_eventide_tracker, ...)
       tracker_data <- purrr::map_dfr(dat_tracker, "tracker_data", .id = "session")
       info %<>% tibble::add_column(date_tracker = td$date,
                                    fname_tracker = td$fnames,
@@ -98,10 +98,6 @@ read_eventide <- function(fname = NULL,
     } else {
       tracker_data <- NULL
     }
-
-    # info$session <- as.integer(droplevels(as.factor(info$session)))
-    # trial_data$session <- as.integer(droplevels(as.factor(trial_data$session)))
-    # tracker_data$session <- as.integer(droplevels(as.factor(tracker_data$session)))
 
     out <- list(
       call = match.call(),
@@ -252,7 +248,7 @@ read_eventide_single <- function(fname,
                              .after = "condition_name")
   df$condition_name[df$condition_name=="go_con"] = "go"
   df %<>% rename(gng = condition_name) %>%
-    mutate(gng = factor(gng, levels = c("go", "nogo")))
+    mutate(gng = factor(gng, levels = c("nogo", "go")))
 
   df %<>% rename(is_correct = is_correct_trial, is_incorrect = is_incorrect_trial,
                  is_abort = is_abort_trial, is_repeat = is_repeat_trial)
@@ -405,7 +401,7 @@ contra_ipsi_tar <- function(x, subject) {
     dir[x > 0] = "ipsi"
     dir[x < 0] = "contra"
   }
-  dir = as.factor(dir)
+  dir = factor(dir, levels = c("ipsi", "contra"))
   return(dir)
 }
 

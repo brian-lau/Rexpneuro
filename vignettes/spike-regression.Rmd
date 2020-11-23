@@ -1,0 +1,136 @@
+---
+title: "spike-regression"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{spike-regression}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(Rexpneuro)
+library(tidyverse, warn.conflicts = F, quietly = T)
+library(broom)
+```
+
+Read data into memory,
+```{r echo = TRUE, message = FALSE, warning = FALSE}
+basedir <- "~/ownCloud/behaviordata/data_analyses_Brian"
+
+# Read in eventide and corresponding spike data, should take ~30 seconds
+t1 <- Sys.time()
+obj <- read_eventide(name = "flocky", include_tracker = F, basedir = basedir) %>%
+  read_matched_spike_data(basedir = basedir)
+Sys.time() - t1
+
+# Brief summary
+summary(obj)
+```
+
+The data returned is not yet useful for running regressions. Let's create a more
+useful data frame,
+```{r echo = TRUE, message = FALSE, warning = FALSE}
+t1 <- Sys.time()
+# Takes about 8 seconds, the align parameter must exist as a column in obj$trial_data
+df <- prep_for_model(obj, align = "target_onset_time", t_start = 0, t_end = 0.5, min_trial = 50)
+Sys.time() - t1
+```
+
+The call above defaults to binning spikes into a single window, and we can now run
+it through a linear regression (per neuron),
+```{r}
+t1 <- Sys.time()
+res <- df %>% group_by(uname, t) %>%
+  group_split() %>%
+  map_dfr(.f = function(df) {
+    lm(fr ~ block*direction + gng*direction, data = df) %>%
+      tidy() %>%
+      add_column(t = unique(df$t), .before = 1) %>%
+      add_column(uname = unique(df$uname), .before = 1) %>%
+      add_column(session = unique(df$session), .before = 1)
+  }) %>%
+  arrange(session)
+Sys.time() - t1
+```
+The data frame returned contains a separate row per coefficient, per neuron
+```{r fig.width = 6, fig.height = 4, fig.align = "center"}
+res
+
+# Filter by coefficient and pipe to figure
+res %>% 
+  filter(term == "gnggo") %>% 
+  mutate(thresh = p.value < 0.05) %>% 
+  ggplot(aes(estimate, fill = thresh)) + geom_histogram()
+```
+
+If we wanted to separately plot histograms of coefficients for neurons that 
+increased or decreased their response (average over trials), we need to go back
+to the prepped data frame,
+
+```{r fig.width = 6, fig.height = 4, fig.align = "center"}
+# Determine whether neuron is positive-response relative to baseline
+temp = df %>% 
+  group_by(uname) %>%                       # for each unique neuron
+  mutate(fr_mean = mean(fr)) %>%            # calculate mean firing rate in window
+  mutate(pos = fr_mean > fr_bl_mean) %>%    # compare to baseline
+  slice(1) %>%                              # take first row
+  arrange(session)
+
+res %>% left_join(temp %>% select(session, uname, pos)) %>%
+  filter(term == "gnggo") %>% 
+  mutate(thresh = p.value < 0.05) %>% 
+  ggplot(aes(estimate, fill = thresh)) + geom_histogram() + facet_wrap(~pos)
+```
+
+We can also run multiple timebins using the same functions,
+```{r fig.width = 6, fig.height = 4, fig.align = "center"}
+# Note the binwidth parameter
+df <- prep_for_model(obj, align = "target_onset_time", t_start = -0.5, t_end = 0.5, 
+                     binwidth = 0.1, min_trial = 50)
+
+t1 <- Sys.time()
+res <- df %>% group_by(uname, t) %>%
+  group_split() %>%
+  map_dfr(.f = function(df) {
+    lm(fr_norm3 ~ block*direction + gng*direction, data = df) %>%
+      tidy() %>%
+      add_column(t = unique(df$t), .before = 1) %>%
+      add_column(uname = unique(df$uname), .before = 1) %>%
+      add_column(session = unique(df$session), .before = 1)
+  }) %>%
+  arrange(session)
+Sys.time() - t1
+```
+
+We could use a separate plot for each time bin of a specific term, although this 
+is a little busy,
+```{r fig.width = 7, fig.height = 7, fig.align = "center"}
+res %>% 
+  filter(term == "blockmix") %>% 
+  mutate(thresh = p.value<0.05) %>% 
+  ggplot(aes(estimate, fill=thresh)) + geom_histogram() + facet_wrap(~as.factor(t))
+```
+
+Or more compactly represent all the terms,
+```{r fig.width = 8, fig.height = 8, fig.align = "center"}
+library(ggridges)
+res %>% 
+  mutate(thresh = p.value<0.05) %>% 
+  ggplot(aes(x = estimate, y = as.factor(t), fill=thresh)) + 
+  geom_density_ridges2(stat = "binline", alpha = 0.5, scale = 0.95, bins = 60) + 
+  facet_wrap(~term)
+
+# If we want to restrict to a particular brain area
+res %>% left_join(obj$info %>% filter(target=="GPi")) %>% filter(target == "GPi") %>%
+  mutate(thresh = p.value<0.05) %>% 
+  ggplot(aes(x = estimate, y = as.factor(t), fill=thresh)) + 
+  geom_density_ridges2(stat = "binline", alpha = 0.5, scale = 0.95, bins = 60) + 
+  facet_wrap(~term)
+```

@@ -67,10 +67,16 @@ count_in_window <- function(x, t1, t2) {
 }
 
 #' @export
+bin_times <- function(x, breaks) {
+  out = lapply(x, function(xx) { xx[xx>=breaks[1] & xx<=breaks[length(breaks)]] })
+  out = lapply(out, function(xx) { tabulate(.bincode(xx, breaks, include.lowest = T), nbins = length(breaks) - 1) })
+}
+
+#' @export
 align_to <- function(x, group_info) {
   library(purrr)
   x %>% unnest(cols = c(neurons)) %>%
-    mutate(across(starts_with("AD"), ~map2(.x, shift, ~.x-.y))) %>%
+    mutate(across(starts_with("AD"), ~map2(.x, shift, ~.x - .y))) %>%
     select(-shift) %>%
     pivot_longer(!counter_total_trials, values_to = "times")
     #nest(neurons = starts_with("AD")) # re-nest?
@@ -84,15 +90,92 @@ add_covariates <- function(x, group_info, y) {
 }
 
 #' @export
-count_spks_in_window <- function(df, align = "cue_onset_time") {
-  library(purrr)
-  df2 <- df %>% filter(!is_abort_trial) %>%
-    mutate(across(starts_with("AD"), ~map2(.x, cue_onset_time, ~align_to(.x,.y)))) %>%  # Align to event
-    select(counter_total_trials, starts_with("AD")) %>%
-    pivot_longer(!counter_total_trials) %>%
-    mutate(count = count_in_window(value, t1, t2)) %>%
-    select(-value) %>%
-    left_join(df %>% select(counter_total_trials, condition, rt))
+drop_trials <- function(x, group_info, y) {
+  x %>% semi_join(y %>% filter(session == group_info$session, !is_abort),
+                  by = c("session", "counter_total_trials")) %>%
+    select(-session)
+}
 
-  return(df2)
+#' @export
+drop_neurons <- function(x, group_info, min_trial = 50) {
+  temp <- x %>% group_by(uname) %>%
+    filter(t == unique(t)[1]) %>%
+    mutate(n = n()) %>% slice(1) %>%
+    filter(n>min_trial)
+  x %>% filter(uname %in% temp$uname)
+}
+
+#' @export
+prep_for_model <- function(obj,
+                           align = "cue_onset_time",
+                           t_start = 0,
+                           t_end = 0.5,
+                           binwidth = t_end,
+                           bl_align = "cue_onset_time",
+                           bl_t_start = -0.5,
+                           bl_t_end = 0,
+                           mask_by_quality = TRUE,
+                           min_trial = 50,
+                           normalize = TRUE
+                           ) {
+  # Pivot spike quality
+  m <- obj$spike_mask %>%
+    group_by(session) %>%
+    group_modify(function(x,y) x %>%
+                   unnest(cols = c(neurons)) %>%
+                   pivot_longer(!counter_total_trials, values_to = "mask")) %>%
+    ungroup()
+
+  # Align spike times to event
+  t <- obj$spike_times %>%
+    bind_cols(shift = obj[["trial_data"]][[align]]) %>%
+    group_by(session) %>%
+    group_modify(align_to) %>%
+    ungroup() %>%
+    filter(m$mask > 0)
+
+  # Count spikes in baseline window & summarise mean and std
+  bl <- obj$spike_times %>%
+    bind_cols(shift = obj[["trial_data"]][[bl_align]]) %>%
+    group_by(session) %>%
+    group_modify(align_to) %>%
+    ungroup()  %>%
+    filter(m$mask > 0) %>%
+    mutate(fr_bl = count_in_window(times, bl_t_start, bl_t_end)/(bl_t_end - bl_t_start)) %>%
+    select(-times) %>%
+    group_by(session, name) %>%
+    summarise(fr_bl_mean = mean(fr_bl), fr_bl_sd = sd(fr_bl), .groups = "drop")
+
+  # Count spikes in windows
+  #bw = .25
+  breaks = seq(t_start, t_end, by = binwidth)
+  mids = breaks[-length(breaks)] + diff(breaks)/2
+  c <- t %>%
+    mutate(uname = fct_cross(as_factor(session), name), .after = name) %>%
+    arrange(session, uname) %>%
+    mutate(t = list(mids)) %>%
+    mutate(binned =  bin_times(times, breaks)) %>%
+    select(-times) %>%
+    unnest(cols = c(t, binned)) %>%
+    mutate(fr = binned/binwidth)
+
+  # Create normalized firing rates
+  c %<>% left_join(bl, by = c("session", "name")) %>%
+    mutate(fr_norm1 = fr - fr_bl_mean,
+           fr_norm2 = fr/fr_bl_mean,
+           fr_norm3 = (fr - fr_bl_mean) / fr_bl_sd)
+
+  # Bind covariates
+  c %<>% group_by(session) %>%
+    group_modify(add_covariates, obj$trial_data %>% select(session, counter_total_trials, block, gng, direction), .keep = TRUE) %>%
+    ungroup()
+
+  # Drop trials
+  c %<>% group_by(session) %>%
+    group_modify(drop_trials, obj$trial_data %>% select(session, counter_total_trials, is_correct, is_incorrect, is_abort), .keep = TRUE)
+
+  c %<>% group_by(session) %>%
+    group_modify(drop_neurons, min_trial = min_trial)
+
+  return(c)
 }
