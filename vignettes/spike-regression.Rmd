@@ -29,7 +29,7 @@ basedir <- "~/ownCloud/behaviordata/data_analyses_Brian"
 
 # Read in eventide and corresponding spike data, should take ~30 seconds
 t1 <- Sys.time()
-obj <- read_eventide(name = "flocky", include_tracker = T, basedir = basedir) %>%
+obj <- read_eventide(name = "flocky", include_tracker = F, basedir = basedir) %>%
   read_matched_spike_data(basedir = basedir)
 Sys.time() - t1
 
