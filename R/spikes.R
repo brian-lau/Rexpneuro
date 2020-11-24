@@ -61,19 +61,32 @@ read_spike <- function(fname) {
 
 #' @export
 count_in_window <- function(x, t1, t2) {
-  out = lapply(x, function(xx) {length(which((xx>=t1) & (xx<=t2)))})
+  # https://stackoverflow.com/questions/13970333/fast-vectorized-function-to-check-if-a-value-is-in-an-interval
+  # https://stackoverflow.com/questions/2190756/how-to-count-true-values-in-a-logical-vector
+  # f1 <- function(xx) {length(which((xx>=t1) & (xx<=t2)))}
+  # f2 <- function(xx) {tabulate(.bincode(xx, c(t1,t2)))}
+  # f3 <- function(xx) {sum(!is.na(.bincode(xx,c(t1,t2))))}
+  # f4 <- function(xx) {sum(.bincode(xx,c(t1,t2)), na.rm = TRUE)}
+  # f5 <- function(xx) {sum(complete.cases(.bincode(xx,c(t1,t2))))}
+  # microbenchmark(lapply(x, f1), lapply(x, f2), lapply(x, f3), lapply(x, f4), lapply(x, f5), times = 10)
+
+  out = lapply(x, function(xx) {sum(.bincode(xx,c(t1,t2)), na.rm = TRUE)})
   unlist(out)
 }
 
 #' @export
 bin_times <- function(x, breaks) {
-  out = lapply(x, function(xx) { xx[xx>=breaks[1] & xx<=breaks[length(breaks)]] })
-  out = lapply(out, function(xx) { tabulate(.bincode(xx, breaks, include.lowest = T), nbins = length(breaks) - 1) })
+  # f1 <- function(xx) { xx[xx>=breaks[1] & xx<=breaks[length(breaks)]] }
+  # f2 <- function(xx) { tabulate(.bincode(xx, breaks, include.lowest = T), nbins = length(breaks) - 1) }
+  # microbenchmark(lapply(lapply(x, f1), f2), lapply(x, f2), times = 10)
+  # all.equal(lapply(lapply(x, f1), f2), lapply(x, f2))
+  lapply(x, function(xx) { tabulate(.bincode(xx, breaks, include.lowest = T), nbins = length(breaks) - 1) })
 }
 
 #' @export
 align_to <- function(x, group_info) {
-  library(purrr)
+  #library(furrr)
+  #albrowser()
   x %>% unnest(cols = c(neurons)) %>%
     mutate(across(starts_with("AD"), ~map2(.x, shift, ~.x - .y))) %>%
     select(-shift) %>%
@@ -128,34 +141,65 @@ prep_for_model <- function(obj,
   # Pivot spike quality
   m <- obj$spike_mask %>%
     group_by(session) %>%
-    group_modify(function(x,y) x %>%
+    group_modify(function(x, y) x %>%
                    unnest(cols = c(neurons)) %>%
                    pivot_longer(!counter_total_trials, values_to = "mask")) %>%
     ungroup()
 
-  # Align spike times to event
-  t <- obj$spike_times %>%
-    bind_cols(shift = obj[["trial_data"]][[align]]) %>%
+  # Long format
+  t_long <- obj$spike_times %>%
+    bind_cols(shift = obj[["trial_data"]][[align]],
+              bl_shift = obj[["trial_data"]][[bl_align]]) %>%
     group_by(session) %>%
-    group_modify(align_to) %>%
+    group_modify(function(x, y) x %>%
+                   unnest(cols = c(neurons)) %>%
+                   pivot_longer(starts_with("AD"), values_to = "times"))
+
+  # Align spike times to event
+  t <- t_long %>%
+    mutate(times = map2(times, shift, ~.x - .y)) %>%
     ungroup() %>%
+    select(-shift, -bl_shift) %>%
     filter(m$mask > 0)
 
   # Count spikes in baseline window & summarise mean and std
-  bl <- obj$spike_times %>%
-    bind_cols(shift = obj[["trial_data"]][[bl_align]]) %>%
-    group_by(session) %>%
-    group_modify(align_to) %>%
-    ungroup()  %>%
+  bl <- t_long %>%
+    mutate(times = map2(times, bl_shift, ~.x - .y)) %>%
+    ungroup() %>%
     filter(m$mask > 0) %>%
     mutate(fr_bl = count_in_window(times, bl_t_start, bl_t_end)/(bl_t_end - bl_t_start)) %>%
     select(-times) %>%
     group_by(session, name) %>%
     summarise(fr_bl_mean = mean(fr_bl), fr_bl_sd = sd(fr_bl), .groups = "drop")
 
+  # tic()
+  # # Align spike times to event
+  # t <- obj$spike_times %>%
+  #   bind_cols(shift = obj[["trial_data"]][[align]]) %>%
+  #   group_by(session) %>%
+  #   group_modify(align_to) %>%
+  #   ungroup() %>%
+  #   filter(m$mask > 0)
+  #
+  # # Count spikes in baseline window & summarise mean and std
+  # bl <- obj$spike_times %>%
+  #   bind_cols(shift = obj[["trial_data"]][[bl_align]]) %>%
+  #   group_by(session) %>%
+  #   group_modify(align_to) %>%
+  #   ungroup()  %>%
+  #   filter(m$mask > 0) %>%
+  #   mutate(fr_bl = count_in_window(times, bl_t_start, bl_t_end)/(bl_t_end - bl_t_start)) %>%
+  #   select(-times) %>%
+  #   group_by(session, name) %>%
+  #   summarise(fr_bl_mean = mean(fr_bl), fr_bl_sd = sd(fr_bl), .groups = "drop")
+  # toc()
+  # all.equal(t1$name,t$name)
+  #
   # Count spikes in windows
   breaks = seq(t_start, t_end, by = binwidth)
   mids = breaks[-length(breaks)] + diff(breaks)/2
+  #browser()
+  #tic()
   c <- t %>%
     mutate(uname = fct_cross(as_factor(session), name), .after = name) %>%
     arrange(session, uname) %>%
@@ -164,6 +208,7 @@ prep_for_model <- function(obj,
     select(-times) %>%
     unnest(cols = c(t, binned)) %>%
     mutate(fr = binned/binwidth)
+  #toc()
 
   # Create normalized firing rates
   c %<>% left_join(bl, by = c("session", "name")) %>%
@@ -171,17 +216,23 @@ prep_for_model <- function(obj,
            fr_norm2 = fr/fr_bl_mean,
            fr_norm3 = (fr - fr_bl_mean) / fr_bl_sd)
 
-  # Bind covariates
   c %<>% group_by(session) %>%
     group_modify(add_covariates, obj$trial_data %>% select(session, counter_total_trials, block, gng, direction), .keep = TRUE) %>%
-    ungroup()
-
-  # Drop trials
-  c %<>% group_by(session) %>%
-    group_modify(drop_trials, obj$trial_data %>% select(session, counter_total_trials, is_correct, is_incorrect, is_abort), .keep = TRUE)
-
-  c %<>% group_by(session) %>%
+    group_modify(drop_trials, obj$trial_data %>% select(session, counter_total_trials, is_correct, is_incorrect, is_abort), .keep = TRUE) %>%
     group_modify(drop_neurons, min_trial = min_trial)
 
+#   tic()
+#   # Bind covariates
+#   c %<>% group_by(session) %>%
+#     group_modify(add_covariates, obj$trial_data %>% select(session, counter_total_trials, block, gng, direction), .keep = TRUE) %>%
+#     ungroup()
+#
+#   # Drop trials
+#   c %<>% group_by(session) %>%
+#     group_modify(drop_trials, obj$trial_data %>% select(session, counter_total_trials, is_correct, is_incorrect, is_abort), .keep = TRUE)
+#
+#   c %<>% group_by(session) %>%
+#     group_modify(drop_neurons, min_trial = min_trial)
+# toc()
   return(c)
 }

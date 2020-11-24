@@ -20,7 +20,7 @@ suppressPackageStartupMessages(library(tidyverse))
 library(broom)
 library(future)
 
-plan("multisession")
+future::plan("multisession")
 ```
 
 Read data into memory,
