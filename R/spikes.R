@@ -81,6 +81,14 @@ align_to <- function(x, group_info) {
     #nest(neurons = starts_with("AD")) # re-nest?
 }
 
+# align_to <- function(x, group_info) {
+#   x %>%
+#     dt_unnest(col = neurons) %>%
+#     mutate(across(starts_with("AD"), ~map2(.x, shift, ~.x - .y))) %>%
+#     select(-shift) %>%
+#     dt_pivot_longer(dt_starts_with("AD"), values_to = "times")
+# }
+
 #' @export
 add_covariates <- function(x, group_info, y) {
   x %>% left_join(y %>% filter(session == group_info$session),
@@ -146,7 +154,6 @@ prep_for_model <- function(obj,
     summarise(fr_bl_mean = mean(fr_bl), fr_bl_sd = sd(fr_bl), .groups = "drop")
 
   # Count spikes in windows
-  #bw = .25
   breaks = seq(t_start, t_end, by = binwidth)
   mids = breaks[-length(breaks)] + diff(breaks)/2
   c <- t %>%

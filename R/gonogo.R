@@ -9,8 +9,9 @@ read_eventide <- function(fname = NULL,
                           include_spike = FALSE,
                           ...
 ) {
-  library(magrittr)
-  library(dplyr)
+  library(magrittr, warn.conflicts = FALSE)
+  library(dplyr, warn.conflicts = FALSE)
+  library(furrr, warn.conflicts = FALSE)
 
   if (is.null(names) & is.null(fname)) stop("Specify subject name or filename.")
 
@@ -66,7 +67,9 @@ read_eventide <- function(fname = NULL,
     )
   } else {
     # Read session data
-    dat <- purrr::map(paste(basedir, fnames, sep = .Platform$file.sep), read_eventide_single, ...)
+    dat <- furrr::future_map(paste(basedir, fnames, sep = .Platform$file.sep), read_eventide_single, ...)
+    #trial_data = furrr::future_map_dfr(dat, "trial_data", .id = "session")
+    #dat <- purrr::map(paste(basedir, fnames, sep = .Platform$file.sep), read_eventide_single, ...)
     trial_data = purrr::map_dfr(dat, "trial_data", .id = "session")
     info <- tibble::tibble(session = unique(trial_data$session),
                            version = purrr::map_chr(dat, "version"),
@@ -75,7 +78,9 @@ read_eventide <- function(fname = NULL,
     )
 
     if (include_tracker) {
-      dat_tracker <- purrr::map(paste(basedir, td$fnames, sep = .Platform$file.sep), read_eventide_tracker, ...)
+      dat_tracker <- furrr::future_map(paste(basedir, td$fnames, sep = .Platform$file.sep), read_eventide_tracker, ...)
+      #tracker_data <- furrr::future_map_dfr(dat_tracker, "tracker_data", .id = "session")
+      #dat_tracker <- purrr::map(paste(basedir, td$fnames, sep = .Platform$file.sep), read_eventide_tracker, ...)
       tracker_data <- purrr::map_dfr(dat_tracker, "tracker_data", .id = "session")
       info %<>% tibble::add_column(date_tracker = td$date,
                                    fname_tracker = td$fnames,
@@ -88,7 +93,7 @@ read_eventide <- function(fname = NULL,
 
       # Convert to trial time
       if ("define_trial_onset_time_absolute" %in% names(trial_data)) {
-        tracker_data$define_trial_onset_time_absolute = trial_data$define_trial_onset_time_absolute
+        tracker_data$define_trial_onset_time_absolute <- trial_data$define_trial_onset_time_absolute
         f <- function(df, t0) {
           df$t <- df$t - t0
           return(df)
@@ -119,8 +124,8 @@ summary.GNGeventide <- function(obj,
                                 skim_func = NULL, # see skimr::skim_with
                                 summarise_durations = FALSE
 ) {
-  library(dplyr)
-  library(skimr)
+  library(dplyr, warn.conflicts = FALSE)
+  library(skimr, warn.conflicts = FALSE)
 
   cat("Call: ")
   print(obj$call)
@@ -171,9 +176,9 @@ read_eventide_single <- function(fname,
                           remove_measured = FALSE,
                           zero_trial_start_time = TRUE
 ) {
-  library(magrittr)
-  library(dplyr)
-  library(readr)
+  library(magrittr, warn.conflicts = FALSE)
+  library(dplyr, warn.conflicts = FALSE)
+  library(readr, warn.conflicts = FALSE)
 
   # Parse filename
 
@@ -292,11 +297,13 @@ read_eventide_single <- function(fname,
 }
 
 #' @export
-read_eventide_tracker <- function(fname, Fs = 100) {
-  library(dplyr)
-  library(tidyr)
-  library(purrr)
-  library(readr)
+read_eventide_tracker <- function(fname,
+                                  Fs = 100
+) {
+  library(dplyr, warn.conflicts = FALSE)
+  library(tidyr, warn.conflicts = FALSE)
+  library(purrr, warn.conflicts = FALSE)
+  library(readr, warn.conflicts = FALSE)
 
   # Parse filename
 
@@ -337,51 +344,60 @@ read_eventide_tracker <- function(fname, Fs = 100) {
            "y" = "Gaze CVY",
            "pressure" = "Pressure")
 
-
-  df %<>% filter((state == "Fixation") |
-                   (state == "Cue") |
-                   (state == "Target>Holding Fixation ROI") |
-                   (state == "Target>Waiting") |
-                   (state == "Target>Target touch") |
-                   (state == "Eval") |
-                   (state == "Correct>Delay") |
-                   (state == "Abort")) %>%
+  # Restrict to states of interest
+  lev <- c("Fixation", "Cue", "Target>Holding Fixation ROI", "Target>Waiting",
+           "Target>Target touch", "Eval", "Correct>Delay", "Abort")
+  df %<>% filter(state %in% lev) %>%
     mutate(x = ifelse(pressure==0, NA, x), y = ifelse(pressure==0, NA, y))
 
-  lev <- c("Fixation", "Cue", "Target>Holding Fixation ROI", "Target>Waiting",
-          "Target>Target touch", "Eval", "Correct>Delay", "Abort")
   lev <- lev[lev %in% unique(df$state)]
   df$state <- factor(df$state, levels = lev)
 
   ## Linearly interpolate to regular grid
-  # Create a regular grid
-  myseq <- function(from, to, by) tibble(t = seq(from, to, by))
-  df2 <- df %>% group_by(counter_total_trials) %>%
-    summarise(start = min(t), end = max(t), .groups = "drop") %>%
-    group_by(counter_total_trials) %>%
-    mutate(t_r = map2(start, end, ~myseq(start, end, 1000/Fs))) %>% # times in msec
-    select(-start,-end)
+  if (FALSE) {
+    # Create a regular grid
+    myseq <- function(from, to, by) tibble(t = seq(from, to, by))
+    df2 <- df %>% group_by(counter_total_trials) %>%
+      summarise(start = min(t), end = max(t), .groups = "drop") %>%
+      group_by(counter_total_trials) %>%
+      mutate(t_r = map2(start, end, ~myseq(start, end, 1000/Fs))) %>% # times in msec
+      select(-start,-end)
 
-  # Join with original data
-  df2 %<>% full_join(df %>% group_by(counter_total_trials) %>% nest(), by = "counter_total_trials")
+    # Join with original data
+    df2 %<>% full_join(df %>% group_by(counter_total_trials) %>% nest(), by = "counter_total_trials")
 
-  # Interpolate
-  myapprox <- function(x, y, xout, method = "linear") {
-    tibble(r = approx(x, y, xout, ties = min, na.rm = FALSE, method = method)$y)
+    # Interpolate
+    myapprox <- function(x, y, xout, method = "linear") {
+      tibble(r = approx(x, y, xout, ties = min, na.rm = FALSE, method = method)$y)
+    }
+    df2 %<>% mutate(state = map2(data, t_r, ~myapprox(.x$t, as.integer(.x$state), .y$t, method = "constant")),
+                    x = map2(data, t_r, ~myapprox(.x$t, .x$x, .y$t)),
+                    y = map2(data, t_r, ~myapprox(.x$t, .x$y, .y$t)),
+                    pressure = map2(data, t_r, ~myapprox(.x$t, .x$pressure, .y$t))) %>%
+      select(-data) %>%
+      unnest(cols = c(t_r, state, x, y, pressure), names_sep = "_") %>%
+      rename(t = t_r_t, state = state_r, x = x_r, y = y_r, pressure = pressure_r) %>%
+      mutate(pressure = ifelse(is.na(x), 0, pressure), t = t/1000)
+    df <- df2
+  } else {
+    myapprox2 <- function(df, dt) {
+      xout <- seq(min(df[["t"]]), max(df[["t"]]), by = dt)
+      tibble(t = xout,
+             state = approx(df[["t"]], as.integer(df[["state"]]), xout, ties = min, na.rm = FALSE, method = "constant")$y,
+             x = approx(df[["t"]], df[["x"]], xout, ties = min, na.rm = FALSE)$y,
+             y = approx(df[["t"]], df[["y"]], xout, ties = min, na.rm = FALSE)$y,
+             pressure = approx(df[["t"]], df[["pressure"]], xout, ties = min, na.rm = FALSE)$y)
+    }
+
+    df %<>% group_by(counter_total_trials) %>%
+      group_modify(~myapprox2(.x, dt = 1000/Fs)) %>%
+      mutate(pressure = ifelse(is.na(x), 0, pressure), t = t/1000)
   }
-  df2 %<>% mutate(state = map2(data, t_r, ~myapprox(.x$t, as.integer(.x$state), .y$t, method = "constant")),
-                  x = map2(data, t_r, ~myapprox(.x$t, .x$x, .y$t)),
-                  y = map2(data, t_r, ~myapprox(.x$t, .x$y, .y$t)),
-                  pressure = map2(data, t_r, ~myapprox(.x$t, .x$pressure, .y$t))) %>%
-    select(-data) %>%
-    unnest(cols = c(t_r, state, x, y, pressure), names_sep = "_") %>%
-    rename(t = t_r_t, state = state_r, x = x_r, y = y_r, pressure = pressure_r) %>%
-    mutate(pressure = ifelse(is.na(x), 0, pressure), t = t/1000)
 
-  df2$state <- factor(df2$state, labels = lev)
+  df$state <- factor(df$state, labels = lev)
 
   out$Fs <- Fs
-  out$tracker_data <- df2 %>% ungroup()
+  out$tracker_data <- df %>% ungroup()
 
   class(out) <- "GNGeventide_tracker"
 
@@ -390,7 +406,7 @@ read_eventide_tracker <- function(fname, Fs = 100) {
 
 contra_ipsi_tar <- function(x, subject) {
   # Contra/Ipsi relative to arm used
-  dir = x
+  dir <- x
   if (subject == "tess") {
     dir[x < 0] = "ipsi"
     dir[x > 0] = "contra"
@@ -401,7 +417,7 @@ contra_ipsi_tar <- function(x, subject) {
     dir[x > 0] = "ipsi"
     dir[x < 0] = "contra"
   }
-  dir = factor(dir, levels = c("ipsi", "contra"))
+  dir <- factor(dir, levels = c("ipsi", "contra"))
   return(dir)
 }
 

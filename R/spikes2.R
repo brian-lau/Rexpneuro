@@ -4,7 +4,7 @@ read_matched_spike_data <- function(obj,
 ) {
   library(tidyr)
   library(forcats)
-  #library(furrr)
+  library(furrr)
 
   # Incoming eventide files to match to corresponding spike data
   fnames_eventide <- obj$info$fname_eventide
@@ -35,8 +35,8 @@ read_matched_spike_data <- function(obj,
   }
 
   fnames_spk <- paste(basedir, paste0(base_name[ind], ".mat"), sep = .Platform$file.sep)
-  #spike_list <- furrr::future_map(fnames_spk, read_spike)
-  spike_list <- purrr::map(fnames_spk, read_spike)
+  spike_list <- furrr::future_map(fnames_spk, read_spike)
+  #spike_list <- purrr::map(fnames_spk, read_spike)
 
   # Add another level of nesting since we can have different #neurons per session
   spike_times <- purrr::map(spike_list, ~.x$spktimes %>% nest(neurons = starts_with("AD"))) %>%
