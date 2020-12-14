@@ -29,12 +29,18 @@ basedir <- "~/ownCloud/behaviordata/data_analyses_Brian"
 
 # Read in eventide and corresponding spike data, should take ~30 seconds
 t1 <- Sys.time()
-obj <- read_eventide(name = "flocky", include_tracker = F, basedir = basedir) %>%
+obj <- read_eventide(name = "tess", include_tracker = F, basedir = basedir) %>%
   read_matched_spike_data(basedir = basedir)
 Sys.time() - t1
 
 # Brief summary
 summary(obj)
+
+# total number of neurons
+sum(obj$info %>% mutate(n = map_dbl(neuron_info, ~nrow(.x))) %>% pull(n))
+
+# Glance at time differences between plexon and EventIDE
+skim(obj$trial_duration %>% select(session, dt))
 ```
 
 The data returned is not yet useful for running regressions. Let's create a more

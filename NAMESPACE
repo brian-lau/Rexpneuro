@@ -2,7 +2,6 @@
 
 S3method(summary,GNGeventide)
 export(add_covariates)
-export(align_to)
 export(bin_times)
 export(count_in_window)
 export(drop_neurons)

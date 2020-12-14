@@ -40,7 +40,7 @@ read_spike <- function(fname) {
                                  fname_eventide = session["bFname"],
                                  trigger = session["trigger"],
                                  artifact = as.logical(session["artifact"]),
-                                 target = session["target"],
+                                 target = trimws(session["target"]),
                                  grid_x = session["grid.x"],
                                  grid_y = session["grid.y"],
                                  tip_depth = as.numeric(session["depth"])
@@ -132,6 +132,7 @@ prep_for_model <- function(obj,
                            ) {
   # Pivot spike quality
   m <- obj$spike_mask %>%
+    #select(-starts_with("V")) %>%
     group_by(session) %>%
     group_modify(function(x, y) x %>%
                    unnest(cols = c(neurons)) %>%

@@ -42,6 +42,7 @@ read_matched_spike_data <- function(obj,
   spike_times <- purrr::map(spike_list, ~.x$spktimes %>% nest(neurons = starts_with("AD"))) %>%
     bind_rows(.id = "session") %>%
     mutate(session = as.integer(session))
+
   spike_mask <- purrr::map(spike_list, ~.x$quality %>% nest(neurons = starts_with("AD"))) %>%
     bind_rows(.id = "session") %>%
     mutate(session = as.integer(session))
