@@ -75,6 +75,11 @@ count_in_window <- function(x, t1, t2) {
 }
 
 #' @export
+in_window <- function(x, t1, t2) {
+  out = lapply(x, function(xx) {xx[!is.na(.bincode(xx,c(t1,t2)))]})
+}
+
+#' @export
 bin_times <- function(x, breaks) {
   # f1 <- function(xx) { xx[xx>=breaks[1] & xx<=breaks[length(breaks)]] }
   # f2 <- function(xx) { tabulate(.bincode(xx, breaks, include.lowest = T), nbins = length(breaks) - 1) }
@@ -115,6 +120,45 @@ drop_neurons <- function(x, group_info, min_trial = 50) {
     mutate(n = n()) %>% slice(1) %>%
     filter(n>min_trial)
   x %>% filter(uname %in% temp$uname)
+}
+
+#' @export
+spks_in_window <- function(obj,
+                           align = "cue_onset_time",
+                           t_start = -0.5,
+                           t_end = 0,
+                           binwidth = t_end,
+                           mask_by_quality = TRUE
+) {
+  # Pivot spike quality
+  m <- obj$spike_mask %>%
+    #select(-starts_with("V")) %>%
+    group_by(session) %>%
+    group_modify(function(x, y) x %>%
+                   unnest(cols = c(neurons)) %>%
+                   pivot_longer(!counter_total_trials, values_to = "mask")) %>%
+    ungroup()
+
+  # Long format
+  t_long <- obj$spike_times %>%
+    bind_cols(shift = obj[["trial_data"]][[align]]) %>%
+    group_by(session) %>%
+    group_modify(function(x, y) x %>%
+                   unnest(cols = c(neurons)) %>%
+                   pivot_longer(starts_with("AD"), values_to = "times"))
+
+  # Align spike times to event
+  t <- t_long %>%
+    mutate(times = map2(times, shift, ~.x - .y)) %>%
+    ungroup() %>%
+    select(-shift) %>%
+    filter(m$mask > 0) %>%
+    mutate(times2 = in_window(times, t_start, t_end))
+
+
+  # Drop spikes outside of window
+
+  return(t)
 }
 
 #' @export
@@ -190,4 +234,24 @@ prep_for_model <- function(obj,
     group_modify(drop_neurons, min_trial = min_trial)
 
   return(c)
+}
+
+#' @export
+regularity <- function(t, R = 0.005) {
+  # t <- c(0.0097, 0.0272, 0.0615, 0.0779, 0.1918, 0.2574, 0.4438, 0.4561, 0.7816, 0.9658)
+  isi <- diff(sort(t))
+  n = length(isi)
+
+  if (n==0) {
+    return(tibble(cv = NA, cv2 = NA, lv = NA, lvr = NA))
+  }
+
+  cv <- sd(isi)/mean(isi)
+  isi1 <- isi[1:(n-1)]
+  isi2 <- isi[2:n]
+  cv2 <- mean(2*abs(isi2 - isi1)/(isi2 + isi1))
+  lv <- 3*mean(((isi1 - isi2)/(isi1 + isi2))^2)
+  lvr <- 3*mean((1 - (4*isi1*isi2)/(isi1 + isi2)^2) * (1 + (4*R)/(isi1 + isi2)))
+
+  return(tibble(cv = cv, cv2 = cv2, lv = lv, lvr = lvr))
 }
