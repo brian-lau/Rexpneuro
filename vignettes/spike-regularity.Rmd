@@ -1,0 +1,67 @@
+---
+title: "spike-regularity"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{spike-regression}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(Rexpneuro)
+suppressPackageStartupMessages(library(tidyverse))
+library(broom)
+library(future)
+library(ggplot2)
+library(ggforce)
+
+future::plan("multisession")
+```
+
+Read data into memory,
+```{r echo = TRUE, message = FALSE, warning = FALSE}
+basedir <- "~/ownCloud/behaviordata/data_analyses_Brian"
+
+# Read in eventide and corresponding spike data, should take ~30 seconds
+t1 <- Sys.time()
+obj <- read_eventide(name = "tess", include_tracker = F, basedir = basedir) %>%
+  read_matched_spike_data(basedir = basedir)
+Sys.time() - t1
+```
+
+Compute regularity measures,
+```{r echo = TRUE, message = FALSE, warning = FALSE}
+t <- spks_in_window(obj, align = "cue_onset_time",
+                    t_start = -0.5,
+                    t_end = 0)
+
+t2 <- t %>% mutate(map_dfr(times2, ~regularity2(.x)))
+
+t2 %<>% mutate(uname = interaction(session, name, sep = ":"), .before = name)
+
+reg <- t2 %>% group_by(uname) %>%
+  summarise(cv = mean(cv, na.rm = T),
+            cv2 = mean(cv2, na.rm = T),
+            lv = mean(lv, na.rm = T),
+            lvr = mean(lvr, na.rm = T)) 
+
+df <- prep_for_model(obj, align = "target_onset_time", t_start = 0, t_end = 0.5, min_trial = 50)
+
+
+ggplot(reg %>% pivot_longer(cols = cv:lvr), aes(x = name, y = value)) + 
+  geom_violin(aes(color = name), draw_quantiles = c(.25, .5, .75)) + 
+  geom_sina(size = .25)
+
+reg %<>% inner_join(df %>% ungroup() %>% group_by(uname) %>% slice(1) %>% select(uname, fr_bl_mean), by = "uname")
+
+ggplot(reg, aes(fr_bl_mean, lvr)) + geom_point()
+
+```

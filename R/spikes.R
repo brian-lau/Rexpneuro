@@ -253,5 +253,7 @@ regularity <- function(t, R = 0.005) {
   lv <- 3*mean(((isi1 - isi2)/(isi1 + isi2))^2)
   lvr <- 3*mean((1 - (4*isi1*isi2)/(isi1 + isi2)^2) * (1 + (4*R)/(isi1 + isi2)))
 
-  return(tibble(cv = cv, cv2 = cv2, lv = lv, lvr = lvr))
+  #return(tibble(cv = cv, cv2 = cv2, lv = lv, lvr = lvr))
+  return(list(cv = cv, cv2 = cv2, lv = lv, lvr = lvr))
 }
+
