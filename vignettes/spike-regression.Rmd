@@ -30,7 +30,7 @@ basedir <- "~/ownCloud/behaviordata/data_analyses_Brian"
 
 # Read in eventide and corresponding spike data, should take ~30 seconds
 t1 <- Sys.time()
-obj <- read_eventide(name = "tess", include_tracker = F, basedir = basedir) %>%
+obj <- read_eventide(name = c("flocky", "tess"), include_tracker = T, basedir = basedir) %>%
   read_matched_spike_data(basedir = basedir)
 Sys.time() - t1
 
@@ -93,7 +93,7 @@ temp = df %>%
   slice(1) %>%                              # take first row
   arrange(session)
 
-res %>% left_join(temp %>% select(session, uname, pos)) %>%
+res %>% left_join(temp %>% select(id, session, uname, pos)) %>%
   filter(term == "gnggo") %>% 
   mutate(thresh = p.value < 0.05) %>% 
   ggplot(aes(estimate, fill = thresh)) + geom_histogram() + facet_wrap(~pos)
@@ -138,7 +138,7 @@ res %>%
   facet_wrap(~term)
 
 # If we want to restrict to a particular brain area
-res %>% left_join(obj$info %>% filter(target=="GPi")) %>% filter(target == "GPi") %>%
+res %>% left_join(obj$info %>% filter(target=="gpi")) %>% filter(target == "gpi") %>%
   mutate(thresh = p.value<0.05) %>% 
   ggplot(aes(x = estimate, y = as.factor(t), fill=thresh)) + 
   geom_density_ridges2(stat = "binline", alpha = 0.5, scale = 0.95, bins = 60) + 

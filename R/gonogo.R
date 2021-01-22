@@ -4,16 +4,35 @@ read_eventide <- function(fname = NULL,
                           basedir = getwd(),
                           start_date = "30012017", # daymonthyear
                           end_date = "30012021",   # daymonthyear
-                          min_trials = 1,
                           include_tracker = FALSE,
-                          include_spike = FALSE,
                           ...
 ) {
   library(magrittr, warn.conflicts = FALSE)
   library(dplyr, warn.conflicts = FALSE)
   library(furrr, warn.conflicts = FALSE)
 
-  if (is.null(names) & is.null(fname)) stop("Specify subject name or filename.")
+  if (is.null(name) & is.null(fname)) stop("Specify subject name or filename.")
+
+  if (length(name) > 1) {
+    obj = list()
+    for (i in 1:length(name)) {
+      obj[[i]] = read_eventide(name = name[i],
+                               basedir = basedir,
+                               start_date = start_date,
+                               end_date = end_date,
+                               include_tracker = include_tracker)
+    }
+    out = list(call = match.call(),
+                   info = map_dfr(obj, ~.x$info),
+                   trial_data = map_dfr(obj, ~.x$trial_data),
+                   tracker_data = map_dfr(obj, ~.x$tracker_data)
+    )
+    if (nrow(out$tracker_data) == 0) {
+      out$tracker_data <- NULL
+    }
+    class(out) <- "GNGeventide"
+    return(out)
+  }
 
   if (!is.null(fname)) {
     fnames <- fname
@@ -77,6 +96,9 @@ read_eventide <- function(fname = NULL,
                            fname_eventide = fnames
     )
 
+    info %<>% mutate(id = name, .before = 1)
+    trial_data %<>% mutate(id = name, .before = 1)
+
     if (include_tracker) {
       dat_tracker <- furrr::future_map(paste(basedir, td$fnames, sep = .Platform$file.sep), read_eventide_tracker, ...)
       #tracker_data <- furrr::future_map_dfr(dat_tracker, "tracker_data", .id = "session")
@@ -100,13 +122,14 @@ read_eventide <- function(fname = NULL,
         }
         tracker_data %<>% mutate(data = map(data, ~f(.x, define_trial_onset_time_absolute)))
       }
+
+      tracker_data %<>% mutate(id = name, .before = 1)
     } else {
       tracker_data <- NULL
     }
 
     out <- list(
       call = match.call(),
-      name = name,
       info = info,
       trial_data = trial_data,
       tracker_data = tracker_data
@@ -173,8 +196,8 @@ summary.GNGeventide <- function(obj,
 
 #' @export
 read_eventide_single <- function(fname,
-                          remove_measured = FALSE,
-                          zero_trial_start_time = TRUE
+                                 remove_measured = FALSE,
+                                 zero_trial_start_time = TRUE
 ) {
   library(magrittr, warn.conflicts = FALSE)
   library(dplyr, warn.conflicts = FALSE)
@@ -438,7 +461,7 @@ parse_tracker_filenames <- function(basedir = getwd()) {
   t <- purrr::map_chr(stringr::str_split(t,".txt"), 1)
 
   d <- as.POSIXct(paste(d, t),
-                    "%Y-%d-%m %H-%M", tz = "Europe/Paris")
+                  "%Y-%d-%m %H-%M", tz = "Europe/Paris")
 
   # Sort by ascending experiment date
   ind <- order(d)

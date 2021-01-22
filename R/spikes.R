@@ -103,14 +103,14 @@ bin_times <- function(x, breaks) {
 add_covariates <- function(x, group_info, y) {
   x %>% left_join(y %>% filter(session == group_info$session),
                   by = c("session", "counter_total_trials")) %>%
-    select(-session)
+    select(-id, -session)
 }
 
 #' @export
 drop_trials <- function(x, group_info, y) {
   x %>% semi_join(y %>% filter(session == group_info$session, !is_abort),
                   by = c("session", "counter_total_trials")) %>%
-    select(-session)
+    select(-id, -session)
 }
 
 #' @export
@@ -153,10 +153,7 @@ spks_in_window <- function(obj,
     ungroup() %>%
     select(-shift) %>%
     filter(m$mask > 0) %>%
-    mutate(times2 = in_window(times, t_start, t_end))
-
-
-  # Drop spikes outside of window
+    mutate(times2 = in_window(times, t_start, t_end)) # Drop spikes outside of window
 
   return(t)
 }
@@ -177,7 +174,7 @@ prep_for_model <- function(obj,
   # Pivot spike quality
   m <- obj$spike_mask %>%
     #select(-starts_with("V")) %>%
-    group_by(session) %>%
+    group_by(id, session) %>%
     group_modify(function(x, y) x %>%
                    unnest(cols = c(neurons)) %>%
                    pivot_longer(!counter_total_trials, values_to = "mask")) %>%
@@ -187,7 +184,7 @@ prep_for_model <- function(obj,
   t_long <- obj$spike_times %>%
     bind_cols(shift = obj[["trial_data"]][[align]],
               bl_shift = obj[["trial_data"]][[bl_align]]) %>%
-    group_by(session) %>%
+    group_by(id, session) %>%
     group_modify(function(x, y) x %>%
                    unnest(cols = c(neurons)) %>%
                    pivot_longer(starts_with("AD"), values_to = "times"))
@@ -206,15 +203,15 @@ prep_for_model <- function(obj,
     filter(m$mask > 0) %>%
     mutate(fr_bl = count_in_window(times, bl_t_start, bl_t_end)/(bl_t_end - bl_t_start)) %>%
     select(-times) %>%
-    group_by(session, name) %>%
+    group_by(id, session, name) %>%
     summarise(fr_bl_mean = mean(fr_bl), fr_bl_sd = sd(fr_bl), .groups = "drop")
 
   # Count spikes in windows
   breaks = seq(t_start, t_end, by = binwidth)
   mids = breaks[-length(breaks)] + diff(breaks)/2
   c <- t %>%
-    mutate(uname = fct_cross(as_factor(session), name), .after = name) %>%
-    arrange(session, uname) %>%
+    mutate(uname = fct_cross(as_factor(id), as_factor(session), name), .after = name) %>%
+    arrange(id, session, uname) %>%
     mutate(t = list(mids)) %>%
     mutate(binned =  bin_times(times, breaks)) %>%
     select(-times) %>%
@@ -222,13 +219,13 @@ prep_for_model <- function(obj,
     mutate(fr = binned/binwidth)
 
   # Create normalized firing rates
-  c %<>% left_join(bl, by = c("session", "name")) %>%
+  c %<>% left_join(bl, by = c("id", "session", "name")) %>%
     mutate(fr_norm1 = fr - fr_bl_mean,
            fr_norm2 = fr/fr_bl_mean,
            fr_norm3 = (fr - fr_bl_mean) / fr_bl_sd)
 
   # Bind covariates & drop trials
-  c %<>% group_by(session) %>%
+  c %<>% group_by(id, session) %>%
     group_modify(add_covariates, obj$trial_data %>% select(session, counter_total_trials, block, gng, direction), .keep = TRUE) %>%
     group_modify(drop_trials, obj$trial_data %>% select(session, counter_total_trials, is_correct, is_incorrect, is_abort), .keep = TRUE) %>%
     group_modify(drop_neurons, min_trial = min_trial)

@@ -6,6 +6,35 @@ read_matched_spike_data <- function(obj,
   library(forcats)
   library(furrr)
 
+  unames <- unique(obj$info$id)
+  # Handle case where we have multiple ids
+  if (length(unames) > 1) {
+    temp = list()
+    # Process each id
+    for (i in 1:length(unames)) {
+      obj_id <- list(call = obj$call,
+                   info = obj$info %>% filter(id == unames[i]),
+                   trial_data = obj$trial_data %>% filter(id == unames[i]),
+                   tracker_data = obj$tracker_data %>% filter(id == unames[i])
+      )
+      temp[[i]] <- read_matched_spike_data(obj_id, basedir = basedir)
+    }
+
+    # Bind together
+    out <- list(call = obj$call,
+                info = map_dfr(temp, ~.x$info),
+                trial_data = map_dfr(temp, ~.x$trial_data),
+                tracker_data = map_dfr(temp, ~.x$tracker_data),
+                spike_times = map_dfr(temp, ~.x$spike_times),
+                spike_mask = map_dfr(temp, ~.x$spike_mask),
+                dropped = map(temp, ~.x$dropped),
+                trial_duration = map_dfr(temp, ~.x$trial_duration)
+    )
+    class(out) <- "GNGeventide"
+
+    return(out)
+  }
+
   # Incoming eventide files to match to corresponding spike data
   fnames_eventide <- obj$info$fname_eventide
   base_name <- purrr::map_chr(stringr::str_split(fnames_eventide, ".txt"), 1)
@@ -64,7 +93,7 @@ read_matched_spike_data <- function(obj,
                  group_by(session) %>%
                  nest(neuron_info = !session),
                by = "session") %>%
-    mutate(session = as.integer(session))
+    mutate(session = as.integer(session), target = stringr::str_to_lower(target))
   obj$info %<>% inner_join(info, by = c("session", "fname_eventide"))
 
   # Calculate trial durations from eventide (time between define trial state)
@@ -85,12 +114,16 @@ read_matched_spike_data <- function(obj,
     mutate(flag_ms = ifelse(dt > 0.002, dt*1000, NA))
 
   # Pack into output
-  obj$spike_times <- spike_times
-  obj$spike_mask <- spike_mask
+  obj$spike_times <- spike_times %>%
+    mutate(id = obj$trial_data$id, .before = 1)
+  obj$spike_mask <- spike_mask %>%
+    mutate(id = obj$trial_data$id, .before = 1)
   obj$dropped <- list(session = dropped_session,
                       eventide = dropped_eventide,
                       spike = dropped_spike)
-  obj$trial_duration <- trial_dur
+  obj$trial_duration <- trial_dur %>%
+    ungroup() %>%
+    mutate(id = obj$trial_data$id, .before = 1)
 
   return(obj)
 }
