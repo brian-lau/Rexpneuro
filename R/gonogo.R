@@ -27,10 +27,11 @@ read_eventide <- function(fname = NULL,
                    trial_data = map_dfr(obj, ~.x$trial_data),
                    tracker_data = map_dfr(obj, ~.x$tracker_data)
     )
+
     if (nrow(out[["tracker_data"]]) == 0) {
-      #browser()
       out[["tracker_data"]] <- NULL
     }
+
     class(out) <- "GNGeventide"
     return(out)
   }
@@ -47,8 +48,7 @@ read_eventide <- function(fname = NULL,
   d <- purrr::map_chr(stringr::str_split(fnames,"_"), 3)
   t <- purrr::map_chr(stringr::str_split(fnames,"_"), 4)
   t <- purrr::map_chr(stringr::str_split(t,".txt"), 1)
-  d <- as.POSIXct(paste(d, t),
-                  "%d%m%Y %H-%M", tz = "Europe/Paris")
+  d <- as.POSIXct(paste(d, t), "%d%m%Y %H-%M", tz = "Europe/Paris")
 
   ## Eventide trial data
   # Sort by ascending experiment date

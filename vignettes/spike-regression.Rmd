@@ -20,6 +20,7 @@ library(Rexpneuro)
 suppressPackageStartupMessages(library(tidyverse))
 library(broom)
 library(future)
+library(tictoc)
 
 future::plan("multisession")
 ```
@@ -29,10 +30,10 @@ Read data into memory,
 basedir <- "~/ownCloud/behaviordata/data_analyses_Brian"
 
 # Read in eventide and corresponding spike data, should take ~30 seconds
-t1 <- Sys.time()
+tic()
 obj <- read_eventide(name = c("flocky", "tess"), include_tracker = F, basedir = basedir) %>%
   read_matched_spike_data(basedir = basedir)
-Sys.time() - t1
+toc()
 
 # Brief summary
 summary(obj)
@@ -47,10 +48,10 @@ skim(obj$trial_duration %>% select(session, dt))
 The data returned is not yet useful for running regressions. Let's create a more
 useful data frame,
 ```{r echo = TRUE, message = FALSE, warning = FALSE}
-t1 <- Sys.time()
+tic()
 # Takes about 8 seconds, the align parameter must exist as a column in obj$trial_data
 df <- prep_for_model(obj, align = "target_onset_time", t_start = 0, t_end = 0.5, min_trial = 50)
-Sys.time() - t1
+toc()
 ```
 
 The call above defaults to binning spikes into a single window, and we can now run
