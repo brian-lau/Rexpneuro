@@ -14,9 +14,13 @@ read_matched_spike_data <- function(obj,
     for (i in 1:length(unames)) {
       obj_id <- list(call = obj$call,
                    info = obj$info %>% filter(id == unames[i]),
-                   trial_data = obj$trial_data %>% filter(id == unames[i]),
-                   tracker_data = obj$tracker_data %>% filter(id == unames[i])
+                   trial_data = obj$trial_data %>% filter(id == unames[i])
       )
+      if (!is.null(obj$tracker_data)) {
+        obj$tracker_data %>% filter(id == unames[i])
+      } else {
+        obj$tracker_data <- NULL
+      }
       temp[[i]] <- read_matched_spike_data(obj_id, basedir = basedir)
     }
 

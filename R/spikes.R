@@ -101,16 +101,24 @@ bin_times <- function(x, breaks) {
 
 #' @export
 add_covariates <- function(x, group_info, y) {
-  x %>% left_join(y %>% filter(session == group_info$session),
-                  by = c("session", "counter_total_trials")) %>%
+  x %>% left_join(
+    y %>% filter(id == group_info$id, session == group_info$session),
+                  by = c("id", "session", "counter_total_trials")) %>%
     select(-id, -session)
+  # x %>% left_join(y %>% filter(session == group_info$session),
+  #                 by = c("session", "counter_total_trials")) %>%
+  #   select(-id, -session)
 }
 
 #' @export
 drop_trials <- function(x, group_info, y) {
-  x %>% semi_join(y %>% filter(session == group_info$session, !is_abort),
-                  by = c("session", "counter_total_trials")) %>%
+  x %>% semi_join(
+    y %>% filter(id == group_info$id, session == group_info$session, !is_abort),
+                  by = c("id", "session", "counter_total_trials")) %>%
     select(-id, -session)
+  # x %>% semi_join(y %>% filter(session == group_info$session, !is_abort),
+  #                 by = c("session", "counter_total_trials")) %>%
+  #   select(-id, -session)
 }
 
 #' @export
@@ -159,6 +167,63 @@ spks_in_window <- function(obj,
 }
 
 #' @export
+unnest_spike_mask <- function(df) {
+  df %>%
+    group_by(id, session) %>%
+    group_modify(function(x, y) x %>%
+                   unnest(cols = c(neurons)) %>%
+                   pivot_longer(!counter_total_trials, values_to = "mask")) %>%
+    ungroup()
+}
+
+#' @export
+unnest_spike_times <- function(df) {
+  df %>%
+    group_by(id, session) %>%
+    group_modify(function(x, y) x %>%
+                   unnest(cols = c(neurons)) %>%
+                   pivot_longer(starts_with("AD"), values_to = "times")) %>%
+    ungroup()
+}
+
+#' @export
+get_psth <- function(obj,
+                     align = "cue_onset_time",
+                     t_start = 0,
+                     t_end = 0.5,
+                     dt = 0.001,
+                     h = 0.01
+) {
+  m <- obj$spike_mask %>% unnest_spike_mask()
+
+  t_long <- obj$spike_times %>%
+    bind_cols(shift = obj[["trial_data"]][[align]]) %>%
+    unnest_spike_times()
+
+  # Align spike times to event
+  t <- t_long %>%
+    mutate(times = map2(times, shift, ~.x - .y)) %>%
+    ungroup()
+
+  x_eval = seq(t_start, t_end, by = dt)
+  t %<>% mutate(psth = map(times, ~smpsth(t = .x, h = h, x_eval = x_eval))) %>%
+    select(-times)
+
+  # Create unique label for neurons
+  t %<>%
+    mutate(uname = fct_cross(as_factor(id), as_factor(session), name), .after = name) %>%
+    arrange(id, session, uname)
+
+  t %<>% group_by(id, session) %>%
+    group_modify(add_covariates,
+                 obj$trial_data %>%
+                   select(id, session, counter_total_trials, block, gng, direction),
+                 .keep = TRUE)
+
+  return(t)
+}
+
+#' @export
 prep_for_model <- function(obj,
                            align = "cue_onset_time",
                            t_start = 0,
@@ -171,23 +236,27 @@ prep_for_model <- function(obj,
                            min_trial = 50,
                            normalize = TRUE
                            ) {
-  # Pivot spike quality
-  m <- obj$spike_mask %>%
-    #select(-starts_with("V")) %>%
-    group_by(id, session) %>%
-    group_modify(function(x, y) x %>%
-                   unnest(cols = c(neurons)) %>%
-                   pivot_longer(!counter_total_trials, values_to = "mask")) %>%
-    ungroup()
+  # # Pivot spike quality
+  # m <- obj$spike_mask %>%
+  #   group_by(id, session) %>%
+  #   group_modify(function(x, y) x %>%
+  #                  unnest(cols = c(neurons)) %>%
+  #                  pivot_longer(!counter_total_trials, values_to = "mask")) %>%
+  #   ungroup()
+  m <- obj$spike_mask %>% unnest_spike_mask()
 
-  # Long format
+  # # Long format
+  # t_long <- obj$spike_times %>%
+  #   bind_cols(shift = obj[["trial_data"]][[align]],
+  #             bl_shift = obj[["trial_data"]][[bl_align]]) %>%
+  #   group_by(id, session) %>%
+  #   group_modify(function(x, y) x %>%
+  #                  unnest(cols = c(neurons)) %>%
+  #                  pivot_longer(starts_with("AD"), values_to = "times"))
   t_long <- obj$spike_times %>%
     bind_cols(shift = obj[["trial_data"]][[align]],
               bl_shift = obj[["trial_data"]][[bl_align]]) %>%
-    group_by(id, session) %>%
-    group_modify(function(x, y) x %>%
-                   unnest(cols = c(neurons)) %>%
-                   pivot_longer(starts_with("AD"), values_to = "times"))
+    unnest_spike_times()
 
   # Align spike times to event
   t <- t_long %>%
@@ -226,8 +295,18 @@ prep_for_model <- function(obj,
 
   # Bind covariates & drop trials
   c %<>% group_by(id, session) %>%
-    group_modify(add_covariates, obj$trial_data %>% select(session, counter_total_trials, block, gng, direction), .keep = TRUE) %>%
-    group_modify(drop_trials, obj$trial_data %>% select(session, counter_total_trials, is_correct, is_incorrect, is_abort), .keep = TRUE) %>%
+    group_modify(add_covariates,
+                 obj$trial_data %>%
+                   select(id, session, counter_total_trials, block, gng, direction),
+                 .keep = TRUE)
+
+  c %<>%
+    group_modify(drop_trials,
+                 obj$trial_data %>%
+                   select(id, session, counter_total_trials, is_correct, is_incorrect, is_abort),
+                 .keep = TRUE)
+
+  c %<>%
     group_modify(drop_neurons, min_trial = min_trial)
 
   return(c)
@@ -254,3 +333,12 @@ regularity <- function(t, R = 0.005) {
   return(list(cv = cv, cv2 = cv2, lv = lv, lvr = lvr))
 }
 
+#' @export
+smpsth <- function(t, x_eval, h = 0.025, ...) {
+  #library(FKSUM)
+  if (length(t) != 0) {
+    FKSUM::fk_density(t, h = h, x_eval = x_eval)[["y"]]
+  } else {
+    rep(0, length(x_eval))
+  }
+}

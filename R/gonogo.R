@@ -27,8 +27,9 @@ read_eventide <- function(fname = NULL,
                    trial_data = map_dfr(obj, ~.x$trial_data),
                    tracker_data = map_dfr(obj, ~.x$tracker_data)
     )
-    if (nrow(out$tracker_data) == 0) {
-      out$tracker_data <- NULL
+    if (nrow(out[["tracker_data"]]) == 0) {
+      #browser()
+      out[["tracker_data"]] <- NULL
     }
     class(out) <- "GNGeventide"
     return(out)
