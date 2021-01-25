@@ -120,10 +120,16 @@ drop_aborts <- function(x, group_info, y) {
 
 #' @export
 drop_neurons <- function(x, group_info, min_trial = 50) {
-  temp <- x %>% group_by(uname) %>%
-    filter(t == unique(t)[1]) %>%
-    mutate(n = n()) %>% slice(1) %>%
-    filter(n>min_trial)
+  if ("t" %in% names(x)) {
+    temp <- x %>% group_by(uname) %>%
+      filter(t == unique(t)[1]) %>%
+      mutate(n = n()) %>% slice(1) %>%
+      filter(n>min_trial)
+  } else {
+    temp <- x %>% group_by(uname) %>%
+      mutate(n = n()) %>% slice(1) %>%
+      filter(n>min_trial)
+  }
   x %>% filter(uname %in% temp$uname)
 }
 
@@ -189,10 +195,15 @@ get_psth <- function(obj,
                      t_start = 0,
                      t_end = 0.5,
                      dt = 0.001,
-                     h = 0.01
+                     h = 0.01,
+                     mask_by_quality = TRUE,
+                     drop_abort_trials = TRUE,
+                     min_trial = 50
 ) {
+  # Pivot spike quality
   m <- obj$spike_mask %>% unnest_spike_mask()
 
+  # Long format spike times
   t_long <- obj$spike_times %>%
     bind_cols(shift = obj[["trial_data"]][[align]]) %>%
     unnest_spike_times()
@@ -200,6 +211,8 @@ get_psth <- function(obj,
   # Align spike times to event
   t <- t_long %>%
     mutate(times = map2(times, shift, ~.x - .y))
+
+  if (mask_by_quality) t %<>% filter(m$mask > 0)
 
   # Smooth
   x_eval = seq(t_start, t_end, by = dt)
@@ -211,11 +224,22 @@ get_psth <- function(obj,
     mutate(uname = fct_cross(as_factor(id), as_factor(session), name), .after = name) %>%
     arrange(id, session, uname)
 
+  # Add covariates
   t %<>% group_by(id, session) %>%
     group_modify(add_covariates,
                  obj$trial_data %>%
                    select(id, session, counter_total_trials, block, gng, direction),
                  .keep = TRUE)
+
+  if (drop_abort_trials) {
+    t %<>%
+      group_modify(drop_aborts,
+                   obj$trial_data %>%
+                     select(id, session, counter_total_trials, is_abort),
+                   .keep = TRUE)
+  }
+
+  if (min_trial > 0) t %<>% group_modify(drop_neurons, min_trial = min_trial)
 
   return(t %>% ungroup())
 }
@@ -236,7 +260,7 @@ prep_for_model <- function(obj,
   # Pivot spike quality
   m <- obj$spike_mask %>% unnest_spike_mask()
 
-  # Long format
+  # Long format spike times
   t_long <- obj$spike_times %>%
     bind_cols(shift = obj[["trial_data"]][[align]],
               bl_shift = obj[["trial_data"]][[bl_align]]) %>%
@@ -282,7 +306,7 @@ prep_for_model <- function(obj,
            fr_norm2 = fr/fr_bl_mean,
            fr_norm3 = (fr - fr_bl_mean) / fr_bl_sd)
 
-  # Bind covariates & drop trials
+  # Bind covariates
   c %<>% group_by(id, session) %>%
     group_modify(add_covariates,
                  obj$trial_data %>%
@@ -331,4 +355,18 @@ smpsth <- function(t, x_eval, h = 0.025, ...) {
   } else {
     rep(0, length(x_eval))
   }
+}
+
+#' @export
+filter_runlengths <- function(x, n, filtered_value = 0) {
+  temp = rle(x) %>%
+    unclass() %>%
+    as.data.frame() %>%
+    rowwise() %>%
+    mutate(values = ifelse(lengths < n, filtered_value, values))
+
+  unlist(temp %>%
+           rowwise() %>%
+           mutate(y = list(rep(values,lengths))) %>%
+           pull(y))
 }
