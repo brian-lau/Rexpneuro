@@ -216,8 +216,12 @@ get_psth <- function(obj,
 
   # Smooth
   x_eval = seq(t_start, t_end, by = dt)
-  t %<>% mutate(psth = map(times, ~smpsth(t = .x, h = h, x_eval = x_eval))) %>%
+  t %<>% mutate(psth = map(times, ~smpsth2(t = .x, h = h,
+                                           from = t_start, to = t_end,
+                                           ngrid = length(x_eval)))) %>%
     select(-times)
+  # t %<>% mutate(psth = map(times, ~smpsth(t = .x, h = h, x_eval = x_eval))) %>%
+  #   select(-times)
 
   # Create unique label for neurons
   t %<>%
@@ -349,11 +353,26 @@ regularity <- function(t, R = 0.005) {
 
 #' @export
 smpsth <- function(t, x_eval, h = 0.025, ...) {
-  #library(FKSUM)
   if (length(t) != 0) {
-    FKSUM::fk_density(t, h = h, x_eval = x_eval)[["y"]]
+    n = sum(!is.na(.bincode(t, c(x_eval[1], x_eval[length[x_eval]]))))
+    FKSUM::fk_density(t, h = h, x_eval = x_eval)[["y"]]*n
+
+    # KernSmooth::bkde(t, bandwidth = h, range.x = c(x_eval[1], x_eval[length[x_eval]]),
+    #           gridsize = length(x_eval))[["y"]]*n
+
   } else {
     rep(0, length(x_eval))
+  }
+}
+
+#' @export
+smpsth2 <- function(t, from, to, ngrid = 1000, h = 0.025, ...) {
+  if (length(t) != 0) {
+    #n = sum(!is.na(.bincode(t, c(from, to))))
+    #FKSUM::fk_density(t, h = h, from = from, to = to, ngrid = ngrid)[["y"]]*n
+    KernSmooth::bkde(t, bandwidth = h, range.x = c(from, to), gridsize = ngrid)[["y"]]*length(t)
+  } else {
+    rep(0, ngrid)
   }
 }
 
