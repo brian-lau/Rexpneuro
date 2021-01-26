@@ -196,6 +196,7 @@ get_psth <- function(obj,
                      t_end = 0.5,
                      dt = 0.001,
                      h = 0.01,
+                     pad = 5,
                      mask_by_quality = TRUE,
                      drop_abort_trials = TRUE,
                      min_trial = 50
@@ -215,13 +216,22 @@ get_psth <- function(obj,
   if (mask_by_quality) t %<>% filter(m$mask > 0)
 
   # Smooth
-  x_eval = seq(t_start, t_end, by = dt)
-  t %<>% mutate(psth = map(times, ~smpsth2(t = .x, h = h,
-                                           from = t_start, to = t_end,
-                                           ngrid = length(x_eval)))) %>%
-    select(-times)
-  # t %<>% mutate(psth = map(times, ~smpsth(t = .x, h = h, x_eval = x_eval))) %>%
+  # x_eval = seq(t_start, t_end, by = dt)
+  # t %<>% mutate(psth = map(times, ~smpsth2(t = .x, h = h,
+  #                                          from = t_start, to = t_end,
+  #                                          ngrid = length(x_eval)))) %>%
   #   select(-times)
+  x_eval = seq(t_start, t_end, by = dt)
+  #ind = x_eval<=t_end & x_eval >= t_start
+  t %<>% mutate(psth = map(times, ~smpsth2(t = .x, h = h,
+                                           from = t_start,
+                                           to = t_end,
+                                           ngrid = length(x_eval),
+                                           pad = pad
+                                           ),
+                           )) %>%
+    #mutate(psth = list(psth[[1]][ind])) %>%
+    select(-times)
 
   # Create unique label for neurons
   t %<>%
@@ -366,11 +376,20 @@ smpsth <- function(t, x_eval, h = 0.025, ...) {
 }
 
 #' @export
-smpsth2 <- function(t, from, to, ngrid = 1000, h = 0.025, ...) {
+smpsth2 <- function(t, from, to, ngrid = 1000, h = 0.025, pad = 0, ...) {
   if (length(t) != 0) {
-    #n = sum(!is.na(.bincode(t, c(from, to))))
-    #FKSUM::fk_density(t, h = h, from = from, to = to, ngrid = ngrid)[["y"]]*n
-    KernSmooth::bkde(t, bandwidth = h, range.x = c(from, to), gridsize = ngrid)[["y"]]*length(t)
+    if (pad) {
+      dt = (to - from)/ngrid
+      from = from - dt*pad
+      to = to + dt*pad
+      ngrid = ngrid + 2*pad
+    }
+    y = KernSmooth::bkde(t, bandwidth = h, range.x = c(from, to),
+                     gridsize = ngrid, truncate = TRUE)[["y"]]*length(t)
+    if (pad) {
+      y = y[(pad+1):(length(y)-pad)]
+    }
+    return(y)
   } else {
     rep(0, ngrid)
   }
