@@ -28,9 +28,7 @@ read_eventide <- function(fname = NULL,
                    tracker_data = map_dfr(obj, ~.x$tracker_data)
     )
 
-    if (nrow(out[["tracker_data"]]) == 0) {
-      out[["tracker_data"]] <- NULL
-    }
+    if (is_empty(out$tracker_data)) out$tracker_data <- NULL
 
     class(out) <- "GNGeventide"
     return(out)
@@ -141,6 +139,34 @@ read_eventide <- function(fname = NULL,
   class(out) <- "GNGeventide"
 
   return(out)
+}
+
+#' @export
+drop_abort_trials <- function(x, ...) {
+  UseMethod("drop_abort_trials", x)
+}
+
+#' @export
+drop_abort_trials.GNGeventide <- function(obj, ...) {
+  obj$trial_data %<>% filter(!is_abort)
+
+  if (!is_empty(obj$tracker_data))
+    obj$tracker_data %<>% semi_join(obj$trial_data,
+                                    by = c("id", "session", "counter_total_trials"))
+
+  if (!is_empty(obj$spike_mask))
+    obj$spike_mask %<>% semi_join(obj$trial_data,
+                                  by = c("id", "session", "counter_total_trials"))
+
+  if (!is_empty(obj$spike_times))
+    obj$spike_times %<>% semi_join(obj$trial_data,
+                                   by = c("id", "session", "counter_total_trials"))
+
+  if (!is_empty(obj$trial_duration))
+    obj$trial_duration %<>% semi_join(obj$trial_data,
+                                   by = c("id", "session", "counter_total_trials"))
+
+  return(obj)
 }
 
 #' @export
