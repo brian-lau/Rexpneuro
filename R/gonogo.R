@@ -332,12 +332,14 @@ read_eventide_single <- function(fname,
   df$cue_duration_programmed <- df$cue_duration
   df$cue_duration <- df$measured_cue_duration
 
-  if (remove_measured) df %<>% select(-starts_with("measured"))
+  df %<>% mutate(fix_acquired_onset_time = cue_onset_time - fix_duration)
 
   df %<>% mutate(liftoff_onset_time = ifelse(condition == "nogo",
                                              cue_onset_time + cue_duration + measured_fix_holding_duration/2,
                                              cue_onset_time + cue_duration + rt),
                  .after = waiting_onset_time)
+
+  if (remove_measured) df %<>% select(-starts_with("measured"))
 
   if (zero_trial_start_time) {
     df %<>% mutate(define_trial_onset_time_absolute = define_trial_onset_time, .before = define_trial_onset_time)

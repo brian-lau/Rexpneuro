@@ -194,6 +194,8 @@ get_psth <- function(obj,
                      align = "cue_onset_time",
                      t_start = 0,
                      t_end = 0.5,
+                     pre_trunc_event = "none",
+                     post_trunc_event = "none",
                      dt = 0.001,
                      h = 0.01,
                      pad = 5,
@@ -207,30 +209,33 @@ get_psth <- function(obj,
   # Long format spike times
   t_long <- obj$spike_times %>%
     bind_cols(shift = obj[["trial_data"]][[align]]) %>%
+    bind_cols(pre_trunc = obj[["trial_data"]][[pre_trunc_event]]) %>%
+    bind_cols(post_trunc = obj[["trial_data"]][[post_trunc_event]]) %>%
     unnest_spike_times()
 
   # Align spike times to event
-  t <- t_long %>%
-    mutate(times = map2(times, shift, ~.x - .y))
+  t <- t_long %>% mutate(times = map2(times, shift, ~.x - .y))
+  if (pre_trunc_event == "none") {
+    t %<>% mutate(pre_trunc = t_start)
+  } else {
+    t %<>% mutate(pre_trunc = pre_trunc - shift)
+  }
+  if (post_trunc_event == "none") {
+    t %<>% mutate(post_trunc = t_end)
+  } else {
+    t %<>% mutate(post_trunc = post_trunc - shift)
+  }
 
   if (mask_by_quality) t %<>% filter(m$mask > 0)
 
   # Smooth
-  # x_eval = seq(t_start, t_end, by = dt)
-  # t %<>% mutate(psth = map(times, ~smpsth2(t = .x, h = h,
-  #                                          from = t_start, to = t_end,
-  #                                          ngrid = length(x_eval)))) %>%
-  #   select(-times)
-  x_eval = seq(t_start, t_end, by = dt)
-  #ind = x_eval<=t_end & x_eval >= t_start
+  x_eval <- seq(t_start, t_end, by = dt)
   t %<>% mutate(psth = map(times, ~smpsth2(t = .x, h = h,
                                            from = t_start,
                                            to = t_end,
                                            ngrid = length(x_eval),
-                                           pad = pad
-                                           ),
+                                           pad = pad),
                            )) %>%
-    #mutate(psth = list(psth[[1]][ind])) %>%
     select(-times)
 
   # Create unique label for neurons
@@ -242,7 +247,9 @@ get_psth <- function(obj,
   t %<>% group_by(id, session) %>%
     group_modify(add_covariates,
                  obj$trial_data %>%
-                   select(id, session, counter_total_trials, block, gng, direction),
+                   select(id, session, counter_total_trials,
+                          is_correct, is_incorrect, is_abort,
+                          block, gng, direction, rt),
                  .keep = TRUE)
 
   if (drop_abort_trials) {
@@ -254,6 +261,16 @@ get_psth <- function(obj,
   }
 
   if (min_trial > 0) t %<>% group_modify(drop_neurons, min_trial = min_trial)
+
+  # Mask outside of pre- and post-events
+  if ((pre_trunc_event != "none") | (post_trunc_event != "none")) {
+    mask_t <- function(x, x_eval, pre, post) {
+      ind = is.na(.bincode(x_eval, c(pre,post)))
+      x[ind] = NA
+      return(x)
+    }
+    t %<>% ungroup() %>% rowwise() %>% mutate(psth = list(mask_t(psth, x_eval, pre_trunc, post_trunc)))
+  }
 
   return(t %>% ungroup())
 }
