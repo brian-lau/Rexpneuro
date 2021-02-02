@@ -207,7 +207,8 @@ get_psth <- function(obj,
                                              "fix_acquired_onset_time",
                                              "cue_onset_time",
                                              "target_onset_time",
-                                             "liftoff_onset_time"), # Will be shifted by align eventtime
+                                             "liftoff_onset_time",
+                                             "reward_onset_time"), # Will be shifted by align eventtime
                      min_trial = 50
 ) {
   # Pivot spike quality
@@ -277,7 +278,28 @@ get_psth <- function(obj,
     t %<>% ungroup() %>% rowwise() %>% mutate(psth = list(mask_t(psth, x_eval, pre_trunc, post_trunc)))
   }
 
-  return(t %>% ungroup())
+  out <- list(
+    align = align,
+    method = method,
+    t_start = t_start,
+    t_end = t_end,
+    t = x_eval,
+    pre_trunc_event = pre_trunc_event, # for censored averaging
+    post_trunc_event = post_trunc_event,
+    dt = dt,
+    h = h,
+    pad = pad,
+    mask_by_quality = mask_by_quality,
+    drop_abort_trials = drop_abort_trials,
+    drop_incorrect_trials = drop_incorrect_trials,
+    psth_df = t
+  )
+
+  class(out) <- "GNGpsth"
+
+  return(out)
+
+  #return(t %>% ungroup())
 }
 
 #' @export
