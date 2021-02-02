@@ -291,6 +291,14 @@ prep_for_model <- function(obj,
                            bl_t_end = 0,
                            mask_by_quality = TRUE,
                            drop_abort_trials = TRUE,
+                           drop_incorrect_trials = TRUE,
+                           add_trial_vars = c("is_correct",
+                                              "is_incorrect",
+                                              "is_abort",
+                                              "block",
+                                              "gng",
+                                              "direction",
+                                              "rt"),
                            min_trial = 50
                            ) {
   # Pivot spike quality
@@ -342,20 +350,29 @@ prep_for_model <- function(obj,
            fr_norm2 = fr/fr_bl_mean,
            fr_norm3 = (fr - fr_bl_mean) / fr_bl_sd)
 
-  # Bind covariates
-  c %<>% group_by(id, session) %>%
-    group_modify(add_covariates,
-                 obj$trial_data %>%
-                   select(id, session, counter_total_trials, block, gng, direction),
-                 .keep = TRUE)
+  # Add trial, time-independent covariates
+  c %<>% ungroup %>%
+    left_join(obj$trial_data %>% select(id, session, counter_total_trials, all_of(add_trial_vars)),
+              by = c("id", "session", "counter_total_trials"))
 
-  if (drop_abort_trials) {
-    c %<>%
-      group_modify(drop_aborts,
-                   obj$trial_data %>%
-                     select(id, session, counter_total_trials, is_abort),
-                   .keep = TRUE)
-  }
+  if (drop_abort_trials) c %<>% filter(!is_abort)
+
+  if (drop_incorrect_trials) c %<>% filter(!is_incorrect)
+
+  # # Bind covariates
+  # c %<>% group_by(id, session) %>%
+  #   group_modify(add_covariates,
+  #                obj$trial_data %>%
+  #                  select(id, session, counter_total_trials, block, gng, direction),
+  #                .keep = TRUE)
+  #
+  # if (drop_abort_trials) {
+  #   c %<>%
+  #     group_modify(drop_aborts,
+  #                  obj$trial_data %>%
+  #                    select(id, session, counter_total_trials, is_abort),
+  #                  .keep = TRUE)
+  # }
 
   if (min_trial > 0) c %<>% group_modify(drop_neurons, min_trial = min_trial)
 
