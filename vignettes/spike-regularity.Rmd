@@ -26,6 +26,7 @@ library(ggforce)
 future::plan("multisession")
 ```
 
+## Section
 Read data into memory,
 ```{r echo = TRUE, message = FALSE, warning = FALSE}
 basedir <- "~/ownCloud/behaviordata/data_analyses_Brian"
@@ -43,9 +44,7 @@ t <- spks_in_window(obj, align = "cue_onset_time",
                     t_start = -0.5,
                     t_end = 0)
 
-t2 <- t %>% mutate(map_dfr(times2, ~regularity2(.x)))
-
-t2 %<>% mutate(uname = interaction(session, name, sep = ":"), .before = name)
+t2 <- t %>% mutate(map_dfr(times2, ~regularity(.x)))
 
 reg <- t2 %>% group_by(uname) %>%
   summarise(cv = mean(cv, na.rm = T),
