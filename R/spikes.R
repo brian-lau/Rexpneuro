@@ -455,3 +455,135 @@ filter_runlengths <- function(x, n, filtered_value = 0) {
            mutate(y = list(rep(values,lengths))) %>%
            pull(y))
 }
+
+#' @export
+plot_psth <- function(psth_obj, rname, save = FALSE, ...) {
+  #library(cowplot)
+  library(scales)
+  library(pals)
+  #rname = "flocky:6:AD06a"
+  df = psth_obj$psth_df %>%
+    filter(uname == rname) %>%
+    unnest_longer(col = psth, indices_to = "ind")
+
+  df %<>% mutate(t = psth_obj$t[ind])
+
+
+  #df %<>% mutate(counter_total_trials = forcats::fct_reorder(as_factor(counter_total_trials), target_onset_time))
+  #df %<>% mutate(counter_total_trials = forcats::as_factor(counter_total_trials))
+  df %<>%
+    #mutate(trial = counter_total_trials)
+    mutate(trial = fct_reorder(fct_reorder(fct_reorder(as_factor(counter_total_trials), target_onset_time, sum, .desc = T),
+                                           as.numeric(block)),
+                               as.numeric(gng)))
+  #mutate(trial = fct_reorder(fct_reorder(as_factor(counter_total_trials), target_onset_time, sum, .desc = T), as.numeric(block)))
+  #mutate(trial = fct_reorder(as_factor(counter_total_trials), target_onset_time))
+
+  df2 <- df %>% group_by(counter_total_trials) %>% slice(1)
+
+  ps = .4
+
+  # Quantile colormap
+  # https://stackoverflow.com/questions/12834802/non-linear-color-distribution-over-the-range-of-values-in-a-geom-raster/12838299
+  ncolors = 100
+  qn <- quantile(df$psth, c(0.01, 0.99), na.rm = T)
+  qn01 <- rescale(c(qn, range(df$psth)))
+  colours = colorRampPalette(viridis(ncolors))(ncolors)
+  values = c(0, seq(qn01[1], qn01[2], length.out = ncolors - 2), 1)
+
+  p1 = ggplot(data = df, aes(t, counter_total_trials, fill = psth)) +
+    geom_raster() +
+    geom_point(data = df2,
+               aes(cue_onset_time, counter_total_trials), color = "blue", size = ps) +
+    geom_point(data = df2,
+               aes(target_onset_time, counter_total_trials), color = "green", size = ps) +
+    geom_point(data = df2,
+               aes(liftoff_onset_time, counter_total_trials, color = block), size = ps) +
+    geom_point(data = df2,
+               aes(reward_onset_time, counter_total_trials, alpha = counter_total_trials), color = "pink", size = ps) +
+    scale_color_manual(name = "block", values = c("cyan", "magenta")) +
+    #scale_fill_gradientn(colours=viridis(100), guide = "colourbar") +
+    scale_fill_gradientn(colours = colours, values = values, guide = "colourbar") +
+    scale_x_continuous(limits = c(t_start, t_end), expand = c(0, 0)) +
+    scale_y_continuous(expand = c(0, 0)) +
+    theme_bw() +
+    theme(axis.text.y = element_text(size = 6),
+          panel.grid = element_blank(),
+          panel.border = element_blank())
+
+  p2 = ggplot(data = df, aes(t, trial, fill = psth)) +
+    geom_raster() +
+    geom_vline(xintercept = df2 %>% filter(gng == "go", block == "mix") %>% pull(target_onset_time) %>% mean() +
+                 df2 %>% filter(gng == "go", block == "mix") %>% pull(rt) %>% mean(),
+               color = "magenta", size = 0.25) +
+    geom_vline(xintercept = df2 %>% filter(gng == "go", block == "con") %>% pull(target_onset_time) %>% mean() +
+                 df2 %>% filter(gng == "go", block == "con") %>% pull(rt) %>% mean(),
+               color = "cyan", size = 0.25) +
+    geom_point(data = df2,
+               aes(fix_acquired_onset_time, trial), color = "grey90", size = ps) +
+    geom_point(data = df2,
+               aes(cue_onset_time, trial), color = "blue", size = ps) +
+    geom_point(data = df2,
+               aes(target_onset_time, trial), color = "green", size = ps) +
+    geom_point(data = df2,
+               aes(liftoff_onset_time, trial, color = block), size = ps) +
+    geom_point(data = df2,
+               aes(reward_onset_time, trial, alpha = counter_total_trials), color = "pink", size = ps) +
+    scale_color_manual(name = "block", values = c("cyan", "magenta")) +
+    #scale_fill_gradientn(colours=viridis(100), guide = "colourbar") +
+    scale_fill_gradientn(colours = colours, values = values, guide = "colourbar") +
+    scale_x_continuous(limits = c(t_start, t_end), expand = c(0, 0)) +
+    theme_bw() +
+    theme(axis.text.y = element_text(size = 4),
+          panel.grid = element_blank(),
+          panel.border = element_blank()) +
+    labs(alpha = "trial", fill = "activity")
+
+
+  prow <- cowplot::plot_grid(
+    p1 + theme(legend.position="none"),
+    p2 + theme(legend.position="none"),
+    align = 'vh',
+    hjust = -1,
+    nrow = 1
+  )
+
+  legend <- cowplot::get_legend(
+    # create some space to the left of the legend
+    p2 + theme(legend.box.margin = margin(0, 0, 0, 12))
+  )
+
+  p <- cowplot::plot_grid(prow, legend, rel_widths = c(3, .4))
+
+  title <- cowplot::ggdraw() +
+    cowplot::draw_label(
+      paste( rname,
+             str_split(unique(df2$fname_eventide),"_")[[1]][3],
+             unique(df2$target),
+             unique(df2$tip_depth),
+             sep = " / "),
+      fontface = 'bold',
+      x = 0,
+      hjust = 0
+    ) +
+    theme(
+      # add margin on the left of the drawing canvas,
+      # so title is aligned with left edge of first plot
+      plot.margin = margin(0, 0, 0, 7)
+    )
+
+  #str_replace(unique(df2$fname_eventide), ".txt", ".pdf")
+  p_out <- cowplot::plot_grid(title, p, ncol = 1, rel_heights = c(.1, 1))
+
+  if (save) {
+    date <- str_split(unique(df2$fname_eventide),"_")[[1]][3]
+    # browser()
+    # target <- unique(df2$target)
+    # depth <- unique(df2$tip_depth)
+    fname <- str_replace_all(rname,":","_")
+
+    cowplot::ggsave2(filename = paste0(fname, "_", date, ".pdf"), plot = p_out)
+  }
+
+  return(p_out)
+}

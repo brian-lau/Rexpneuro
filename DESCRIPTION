@@ -24,6 +24,8 @@ Imports:
     matrixStats,
     ggplot2,
     R.matlab,
+    scales,
+    pals,
     zoo,
     KernSmooth
 License: What license is it under?
