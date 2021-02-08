@@ -343,7 +343,8 @@ read_eventide_single <- function(fname,
 
   if (zero_trial_start_time) {
     df %<>% mutate(define_trial_onset_time_absolute = define_trial_onset_time, .before = define_trial_onset_time)
-    df %<>% mutate(across(ends_with("_onset_time"), ~purrr::map2_dbl(.x, define_trial_onset_time, ~.x - .y)))
+    shift = df$define_trial_onset_time
+    df %<>% mutate(across(ends_with("_onset_time"), ~purrr::map2_dbl(.x, shift, ~.x - .y)))
 
     # Remove negative times occuring on trials where certain events don't happen due to error/abort,
     # and the previous stored time is written in it's place.
