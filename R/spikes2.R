@@ -1,6 +1,7 @@
 #' @export
 read_matched_spike_data <- function(obj,
-                          basedir = getwd()
+                          basedir = getwd(),
+                          resort = TRUE
 ) {
   library(tidyr)
   library(forcats)
@@ -21,7 +22,7 @@ read_matched_spike_data <- function(obj,
       } else {
         obj_id$tracker_data <- NULL
       }
-      temp[[i]] <- read_matched_spike_data(obj_id, basedir = basedir)
+      temp[[i]] <- read_matched_spike_data(obj_id, basedir = basedir, resort = resort)
     }
 
     # Bind together
@@ -44,8 +45,14 @@ read_matched_spike_data <- function(obj,
   base_name <- purrr::map_chr(stringr::str_split(fnames_eventide, ".txt"), 1)
 
   # Available spike data
-  fnames <- list.files(path = basedir,
-                       pattern = glob2rx(paste0("*GNG", "*.mat")))
+  if (resort) {
+    base_name <- paste0(base_name,'_resort')
+    fnames <- list.files(path = basedir,
+                         pattern = glob2rx(paste0("*GNG", "*_resort.mat")))
+  } else {
+    fnames <- list.files(path = basedir,
+                         pattern = glob2rx(paste0("*GNG", "*.mat")))
+  }
   available_name <- purrr::map_chr(stringr::str_split(fnames, ".mat"), 1)
 
   # Which eventide sessions having corresponding spike data?
@@ -68,7 +75,11 @@ read_matched_spike_data <- function(obj,
   }
 
   fnames_spk <- paste(basedir, paste0(base_name[ind], ".mat"), sep = .Platform$file.sep)
-  spike_list <- furrr::future_map(fnames_spk, read_spike)
+  if (resort) {
+    spike_list <- furrr::future_map(fnames_spk, read_spike_resort)
+  } else {
+    spike_list <- furrr::future_map(fnames_spk, read_spike)
+  }
   #spike_list <- purrr::map(fnames_spk, read_spike)
 
   # Add another level of nesting since we can have different #neurons per session

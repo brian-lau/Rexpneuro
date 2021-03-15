@@ -1,4 +1,76 @@
 #' @export
+read_spike_resort <- function(fname) {
+  library(magrittr)
+  library(dplyr)
+  library(tibble)
+
+  dat <- R.matlab::readMat(fname)
+
+  ## Neuron info
+  # http://lukaspuettmann.com/2017/03/13/matlab-struct-to-r-dataframe/
+  varNames    <- names(dat$CLUSTER.STATS[,,1])
+  datList     <- dat$CLUSTER.STATS
+  temp = (t(matrix(unlist(datList), nrow = length(varNames))))
+  colnames(temp) <- varNames
+  cluster_stats = as_tibble(temp, .name_repair = c("check_unique", "universal"))
+
+  varNames    <- names(dat$NEURON.INFO[,,1])
+  datList     <- dat$NEURON.INFO
+  n_cells = length(datList)/length(varNames)
+  neuron_info = list()
+  for (i in 1:n_cells) {
+    neuron_info[[i]] = tibble(name = datList[,,i]$name[[1]],
+                         filename = datList[,,i]$filename[[1]],
+                         channel = datList[,,i]$channel[[1]],
+                         channel_robust_sd = list(as.vector(datList[,,i]$channel.robust.sd)),
+                         spike_wave_mean = list(as.vector(datList[,,i]$spike.wave.mean)),
+                         spike_wave_sd = list(as.vector(datList[,,i]$spike.wave.mean)),
+                         exclude_times = list(datList[,,i]$exclude.times)
+                         )
+  }
+  neuron_info <- bind_rows(neuron_info)
+
+  neuron_info <- bind_cols(neuron_info,cluster_stats)
+
+  session = temp = unlist(dat$session[, , 1])
+
+  spk = matrix(dat$times, ncol = length(neuron_info$name))
+  colnames(spk) <- neuron_info$name
+  f <- function(x) unlist(x, use.names = F)
+  spk <- apply(spk, c(1, 2), f)
+
+  spktimes <- as_tibble(spk) %>%
+    add_column(counter_total_trials = 1:nrow(spk), .before = 1)
+
+  quality <- dat$quality
+  colnames(quality) <- neuron_info$name
+  quality <- as_tibble(quality) %>%
+    add_column(counter_total_trials = 1:nrow(spk), .before = 1)
+
+  session_info <- tibble::tibble(fname_ephys = session["eFname"],
+                                 fname_eventide = session["bFname"],
+                                 trigger = session["trigger"],
+                                 artifact = as.logical(session["artifact"]),
+                                 target = trimws(session["target"]),
+                                 grid_x = session["grid.x"],
+                                 grid_y = session["grid.y"],
+                                 tip_depth = as.numeric(session["depth"])
+  )
+
+  out <- list(
+    session_info = session_info,
+    trigger_timestamps = tibble(t = as.vector(dat$event.timestamps)),
+    neuron_info = neuron_info,
+    spktimes = spktimes,
+    quality = quality
+  )
+
+  class(out) <- "GNGspikedata_resort"
+
+  return(out)
+}
+
+#' @export
 read_spike <- function(fname) {
   library(magrittr)
   library(dplyr)
