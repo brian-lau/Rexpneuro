@@ -11,6 +11,7 @@ read_spike_resort <- function(fname) {
 
   # Various statistics for each cluster
   varNames    <- names(dat$CLUSTER.STATS[,,1])
+  varNames    <- stringr::str_replace_all(varNames,"\\.","_")
   datList     <- dat$CLUSTER.STATS
   temp = (t(matrix(unlist(datList), nrow = length(varNames))))
   colnames(temp) <- varNames
@@ -26,6 +27,8 @@ read_spike_resort <- function(fname) {
     neuron_info[[i]] = tibble(name = datList[,,i]$name[[1]],
                          filename = datList[,,i]$filename[[1]],
                          channel = datList[,,i]$channel[[1]],
+                         depth = datList[,,i]$depth,
+                         area = datList[,,i]$area,
                          channel_robust_sd = list(as.vector(datList[,,i]$channel.robust.sd)),
                          spike_wave_mean = list(as.vector(datList[,,i]$spike.wave.mean)),
                          spike_wave_sd = list(as.vector(datList[,,i]$spike.wave.mean)),
@@ -58,7 +61,11 @@ read_spike_resort <- function(fname) {
                                  target = trimws(session["target"]),
                                  grid_x = session["grid.x"],
                                  grid_y = session["grid.y"],
-                                 tip_depth = as.numeric(session["depth"])
+                                 tip_depth = as.numeric(session["depth"]),
+                                 intralaminar_depth = as.numeric(session["intralaminar.depth"]),
+                                 dist_to_first_electrode = as.numeric(session["dist.to.first.electrode"]),
+                                 inter_electrode_spacing = as.numeric(session["inter.electrode.spacing"]),
+                                 probe_id = session["probe.id"]
   )
 
   out <- list(
@@ -631,7 +638,7 @@ plot_psth <- function(psth_obj, rname, save = FALSE, append_str = '', ...) {
   )
 
   p <- cowplot::plot_grid(prow, legend, rel_widths = c(3, .4))
-browser()
+
   title <- cowplot::ggdraw() +
     cowplot::draw_label(
       paste( rname,
@@ -658,7 +665,8 @@ browser()
     # depth <- unique(df2$tip_depth)
     fname <- stringr::str_replace_all(rname,":","_")
 
-    cowplot::ggsave2(filename = paste0(fname, "_", date, append_str, ".pdf"), plot = p_out)
+    cowplot::ggsave2(filename = paste0(fname, "_", date, append_str, ".pdf"), plot = p_out,
+                     width = 6.16, height = 5.37, units = c("in"))
   }
 
   return(p_out)
