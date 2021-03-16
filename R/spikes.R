@@ -8,12 +8,16 @@ read_spike_resort <- function(fname) {
 
   ## Neuron info
   # http://lukaspuettmann.com/2017/03/13/matlab-struct-to-r-dataframe/
+
+  # Various statistics for each cluster
   varNames    <- names(dat$CLUSTER.STATS[,,1])
   datList     <- dat$CLUSTER.STATS
   temp = (t(matrix(unlist(datList), nrow = length(varNames))))
   colnames(temp) <- varNames
-  cluster_stats = as_tibble(temp, .name_repair = c("check_unique", "universal"))
+  cluster_stats <- as_tibble(temp, .name_repair = c("check_unique", "universal")) %>%
+    select(-id)
 
+  # Information defining cluster
   varNames    <- names(dat$NEURON.INFO[,,1])
   datList     <- dat$NEURON.INFO
   n_cells = length(datList)/length(varNames)
@@ -30,7 +34,7 @@ read_spike_resort <- function(fname) {
   }
   neuron_info <- bind_rows(neuron_info)
 
-  neuron_info <- bind_cols(neuron_info,cluster_stats)
+  neuron_info <- bind_cols(neuron_info, cluster_stats)
 
   session = temp = unlist(dat$session[, , 1])
 
@@ -529,10 +533,11 @@ filter_runlengths <- function(x, n, filtered_value = 0) {
 }
 
 #' @export
-plot_psth <- function(psth_obj, rname, save = FALSE, ...) {
+plot_psth <- function(psth_obj, rname, save = FALSE, append_str = '', ...) {
   #library(cowplot)
   library(scales)
   library(pals)
+  library(ggplot2)
   #rname = "flocky:6:AD06a"
   df = psth_obj$psth_df %>%
     filter(uname == rname) %>%
@@ -626,11 +631,11 @@ plot_psth <- function(psth_obj, rname, save = FALSE, ...) {
   )
 
   p <- cowplot::plot_grid(prow, legend, rel_widths = c(3, .4))
-
+browser()
   title <- cowplot::ggdraw() +
     cowplot::draw_label(
       paste( rname,
-             str_split(unique(df2$fname_eventide),"_")[[1]][3],
+             stringr::str_split(unique(df2$fname_eventide),"_")[[1]][3],
              unique(df2$target),
              unique(df2$tip_depth),
              sep = " / "),
@@ -644,17 +649,16 @@ plot_psth <- function(psth_obj, rname, save = FALSE, ...) {
       plot.margin = margin(0, 0, 0, 7)
     )
 
-  #str_replace(unique(df2$fname_eventide), ".txt", ".pdf")
   p_out <- cowplot::plot_grid(title, p, ncol = 1, rel_heights = c(.1, 1))
 
   if (save) {
-    date <- str_split(unique(df2$fname_eventide),"_")[[1]][3]
+    date <- stringr::str_split(unique(df2$fname_eventide),"_")[[1]][3]
     # browser()
     # target <- unique(df2$target)
     # depth <- unique(df2$tip_depth)
-    fname <- str_replace_all(rname,":","_")
+    fname <- stringr::str_replace_all(rname,":","_")
 
-    cowplot::ggsave2(filename = paste0(fname, "_", date, ".pdf"), plot = p_out)
+    cowplot::ggsave2(filename = paste0(fname, "_", date, append_str, ".pdf"), plot = p_out)
   }
 
   return(p_out)
