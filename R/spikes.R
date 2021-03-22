@@ -32,6 +32,13 @@ read_spike_resort <- function(fname) {
                          channel_robust_sd = list(as.vector(datList[,,i]$channel.robust.sd)),
                          spike_wave_mean = list(as.vector(datList[,,i]$spike.wave.mean)),
                          spike_wave_sd = list(as.vector(datList[,,i]$spike.wave.mean)),
+                         neg_peak_amp = datList[,,i]$neg.peak.amp[[1]],
+                         neg_peak_t = datList[,,i]$neg.peak.t[[1]],
+                         pos_peak_amp = datList[,,i]$pos.peak.amp[[1]],
+                         pos_peak_t = datList[,,i]$pos.peak.t[[1]],
+                         is_peak_neg = datList[,,i]$is.peak.neg[[1]],
+                         halfpeak_dur = datList[,,i]$halfpeak.dur[[1]],
+                         peak_to_trough_dur = datList[,,i]$peak.to.trough.dur[[1]],
                          exclude_times = list(datList[,,i]$exclude.times)
                          )
   }
