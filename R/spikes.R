@@ -69,6 +69,7 @@ read_spike_resort <- function(fname) {
                                  grid_x = session["grid.x"],
                                  grid_y = session["grid.y"],
                                  tip_depth = as.numeric(session["depth"]),
+                                 gpe_depth = as.numeric(session["gpe.depth"]),
                                  intralaminar_depth = as.numeric(session["intralaminar.depth"]),
                                  dist_to_first_electrode = as.numeric(session["dist.to.first.electrode"]),
                                  inter_electrode_spacing = as.numeric(session["inter.electrode.spacing"]),
