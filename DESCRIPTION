@@ -22,6 +22,7 @@ Imports:
     lme4,
     emmeans,
     matrixStats,
+    modeest,
     ggplot2,
     R.matlab,
     scales,

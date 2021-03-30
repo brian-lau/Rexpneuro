@@ -17,6 +17,9 @@ read_spike_resort <- function(fname) {
   colnames(temp) <- varNames
   cluster_stats <- as_tibble(temp, .name_repair = c("check_unique", "universal")) %>%
     select(-id)
+  #browser()
+  #cluster_stats %<>% naniar::replace_with_na_all(condition = ~is.nan(.x))
+  cluster_stats %<>% mutate_all(~ifelse(is.nan(.), NA, .))
 
   # Information defining cluster
   varNames    <- names(dat$NEURON.INFO[,,1])
@@ -553,13 +556,12 @@ plot_psth <- function(psth_obj, rname, save = FALSE, append_str = '', ...) {
   library(scales)
   library(pals)
   library(ggplot2)
-  #rname = "flocky:6:AD06a"
+
   df = psth_obj$psth_df %>%
     filter(uname == rname) %>%
     unnest_longer(col = psth, indices_to = "ind")
 
   df %<>% mutate(t = psth_obj$t[ind])
-
 
   #df %<>% mutate(counter_total_trials = forcats::fct_reorder(as_factor(counter_total_trials), target_onset_time))
   #df %<>% mutate(counter_total_trials = forcats::as_factor(counter_total_trials))
@@ -573,7 +575,7 @@ plot_psth <- function(psth_obj, rname, save = FALSE, append_str = '', ...) {
 
   df2 <- df %>% group_by(counter_total_trials) %>% slice(1)
 
-  ps = .4
+  ps <- .4
 
   # Quantile colormap
   # https://stackoverflow.com/questions/12834802/non-linear-color-distribution-over-the-range-of-values-in-a-geom-raster/12838299
