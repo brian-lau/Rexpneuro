@@ -5,11 +5,11 @@
 
 #' @export
 mi.find.bursts <- function(spikes,
-                           beg.isi=0.1,
-                           end.isi=0.1,
-                           min.ibi=0.1,
+                           beg.isi=0.006,
+                           end.isi=0.009,
+                           min.ibi=0.020,
                            min.durn=0.005,
-                           min.spikes=2,
+                           min.spikes=3,
                            debug=FALSE) {
 
   ## For one spike train, find the burst using max interval method.
@@ -185,13 +185,11 @@ mi.find.bursts <- function(spikes,
 }
 
 
-
-# Modified from https://github.com/ellesec/burstanalysis/blob/master/Burst_detection_methods/PS_method.R
+# Wrapper for PS.method
 burst_poisson_surprise <- function(x) {
   burst = map(.x=x$times, .f=~PS.method(.x))
 
   # Deal with no spikes
-  #trial_dur = map(.x=x$times, .f=~max(.x)-min(.x))
   trial_dur = map(.x=x$times, .f=~ifelse(length(.x)>1, max(.x)-min(.x), NA))
   total_spks = map_dbl(.x=x$times, .f=~length(.x))
 
@@ -211,22 +209,32 @@ burst_poisson_surprise <- function(x) {
                                                     mean(.x$SI),
                                                     NA))
 
-  spks_in_burst <- map2_dbl(.x=burst, .y=trial_dur, .f=~ifelse(nrow(.x)>0,
-                                                               sum(.x$len),
-                                                               0))
+  spks_in_burst <- map_dbl(.x=burst, .f=~ifelse(nrow(.x)>0,
+                                                sum(.x$len),
+                                                0))
+  total_burst_dur <- map_dbl(.x=burst, .f=~ifelse(nrow(.x)>0,
+                                                sum(.x$durn),
+                                                0))
+
   frac_spks_in_burst <- spks_in_burst/total_spks
 
-  # fr_in_burst
-  # fr_outside_burst
+  fr <- total_spks/unlist(trial_dur)
+  fr_in_burst <- spks_in_burst/total_burst_dur
+  fr_out_burst <- (total_spks - spks_in_burst)/(unlist(trial_dur) - total_burst_dur)
 
   return(data.frame(burst_rate = mean(rate, na.rm = T),
                     burst_dur = mean(dur, na.rm = T),
                     burst_IBI = mean(IBI, na.rm = T),
                     burst_isi = mean(isi, na.rm = T),
                     burst_SI = mean(SI, na.rm = T),
-                    burst_frac_spks_in_burst = mean(frac_spks_in_burst, na.rm = T)))
+                    burst_frac_spks_in_burst = mean(frac_spks_in_burst, na.rm = T),
+                    fr = mean(fr, na.rm = T),
+                    fr_in_burst = mean(fr_in_burst, na.rm = T),
+                    fr_out_burst = mean(fr_out_burst, na.rm = T)))
 }
 
+# Modified from https://github.com/ellesec/burstanalysis/blob/master/Burst_detection_methods/PS_method.R
+# Returns empty data.frame for no bursts
 PS.method<-function(spike.train, si.thresh=5) {
   si.thresh<-ifelse(is.null(si.thresh), 5, si.thresh)
   burst <- si.find.bursts.thresh(spike.train)
@@ -254,9 +262,6 @@ PS.method<-function(spike.train, si.thresh=5) {
   }
   result
 }
-
-
-
 
 si.find.bursts.thresh<- function (spikes, debug = FALSE)
 {

@@ -31,6 +31,7 @@ read_spike_resort <- function(fname) {
                          filename = datList[,,i]$filename[[1]],
                          channel = datList[,,i]$channel[[1]],
                          depth = datList[,,i]$depth[[1]],
+                         rel_depth = datList[,,i]$rel.depth[[1]],
                          area = datList[,,i]$area[[1]],
                          channel_robust_sd = list(as.vector(datList[,,i]$channel.robust.sd)),
                          spike_wave_mean = list(as.vector(datList[,,i]$spike.wave.mean)),
