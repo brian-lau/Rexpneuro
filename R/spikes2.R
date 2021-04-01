@@ -27,13 +27,13 @@ read_matched_spike_data <- function(obj,
 
     # Bind together
     out <- list(call = obj$call,
-                info = map_dfr(temp, ~.x$info),
-                trial_data = map_dfr(temp, ~.x$trial_data),
-                tracker_data = map_dfr(temp, ~.x$tracker_data),
-                spike_times = map_dfr(temp, ~.x$spike_times),
-                spike_mask = map_dfr(temp, ~.x$spike_mask),
-                dropped = map(temp, ~.x$dropped),
-                trial_duration = map_dfr(temp, ~.x$trial_duration)
+                info = purrr::map_dfr(temp, ~.x$info),
+                trial_data = purrr::map_dfr(temp, ~.x$trial_data),
+                tracker_data = purrr::map_dfr(temp, ~.x$tracker_data),
+                spike_times = purrr::map_dfr(temp, ~.x$spike_times),
+                spike_mask = purrr::map_dfr(temp, ~.x$spike_mask),
+                dropped = purrr::map(temp, ~.x$dropped),
+                trial_duration = purrr::map_dfr(temp, ~.x$trial_duration)
     )
     class(out) <- "GNGeventide"
 

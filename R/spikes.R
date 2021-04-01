@@ -243,7 +243,7 @@ spks_in_window <- function(obj,
 
   # Align spike times to event
   t <- t_long %>%
-    mutate(times = map2(times, shift, ~.x - .y)) %>%
+    mutate(times = purrr::map2(times, shift, ~.x - .y)) %>%
     ungroup() %>%
     select(-shift) %>%
     filter(m$mask > 0) %>%
@@ -317,7 +317,7 @@ get_psth <- function(obj,
     unnest_spike_times()
 
   # Align spike times to event
-  t <- t_long %>% mutate(times = map2(times, shift, ~.x - .y))
+  t <- t_long %>% mutate(times = purrr::map2(times, shift, ~.x - .y))
   if (pre_trunc_event == "none") {
     t %<>% mutate(pre_trunc = t_start)
   } else {
@@ -333,7 +333,7 @@ get_psth <- function(obj,
 
   # Smooth
   x_eval <- seq(t_start, t_end, by = dt)
-  t %<>% mutate(psth = map(times, ~smpsth(t = .x, h = h,
+  t %<>% mutate(psth = purrr::map(times, ~smpsth(t = .x, h = h,
                                            from = t_start,
                                            to = t_end,
                                            ngrid = length(x_eval),
@@ -429,14 +429,14 @@ prep_for_model <- function(obj,
 
   # Align spike times to event
   t <- t_long %>%
-    mutate(times = map2(times, shift, ~.x - .y)) %>%
+    mutate(times = purrr::map2(times, shift, ~.x - .y)) %>%
     select(-shift, -bl_shift)
 
   if (mask_by_quality) t %<>% filter(m$mask > 0)
 
   # Count spikes in baseline window & summarise mean and std
   bl <- t_long %>%
-    mutate(times = map2(times, bl_shift, ~.x - .y)) %>%
+    mutate(times = purrr::map2(times, bl_shift, ~.x - .y)) %>%
     select(-shift, -bl_shift)
 
   if (mask_by_quality) bl %<>% filter(m$mask > 0)

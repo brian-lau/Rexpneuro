@@ -186,33 +186,34 @@ mi.find.bursts <- function(spikes,
 
 
 # Wrapper for PS.method
+#' @export
 burst_poisson_surprise <- function(x) {
-  burst = map(.x=x$times, .f=~PS.method(.x))
+  burst = purrr::map(.x=x$times, .f=~PS.method(.x))
 
   # Deal with no spikes
-  trial_dur = map(.x=x$times, .f=~ifelse(length(.x)>1, max(.x)-min(.x), NA))
-  total_spks = map_dbl(.x=x$times, .f=~length(.x))
+  trial_dur = purrr::map(.x=x$times, .f=~ifelse(length(.x)>1, max(.x)-min(.x), NA))
+  total_spks = purrr::map_dbl(.x=x$times, .f=~length(.x))
 
-  rate <- map2_dbl(.x=burst, .y=trial_dur, .f=~ifelse(nrow(.x)>0,
+  rate <- purrr::map2_dbl(.x=burst, .y=trial_dur, .f=~ifelse(nrow(.x)>0,
                                                       nrow(.x)/.y,
                                                       0))
-  dur <- map2_dbl(.x=burst, .y=trial_dur, .f=~ifelse(nrow(.x)>0,
+  dur <- purrr::map2_dbl(.x=burst, .y=trial_dur, .f=~ifelse(nrow(.x)>0,
                                                      mean(.x$durn),
                                                      NA))
-  IBI <- map2_dbl(.x=burst, .y=trial_dur, .f=~ifelse(nrow(.x)>1,
+  IBI <- purrr::map2_dbl(.x=burst, .y=trial_dur, .f=~ifelse(nrow(.x)>1,
                                                      mean(.x$IBI, na.rm = T),
                                                      NA))
-  isi <- map2_dbl(.x=burst, .y=trial_dur, .f=~ifelse(nrow(.x)>0,
+  isi <- purrr::map2_dbl(.x=burst, .y=trial_dur, .f=~ifelse(nrow(.x)>0,
                                                      mean(.x$mean.isis),
                                                      NA))
-  SI <- map2_dbl(.x=burst, .y=trial_dur, .f=~ifelse(nrow(.x)>0,
+  SI <- purrr::map2_dbl(.x=burst, .y=trial_dur, .f=~ifelse(nrow(.x)>0,
                                                     mean(.x$SI),
                                                     NA))
 
-  spks_in_burst <- map_dbl(.x=burst, .f=~ifelse(nrow(.x)>0,
+  spks_in_burst <- purrr::map_dbl(.x=burst, .f=~ifelse(nrow(.x)>0,
                                                 sum(.x$len),
                                                 0))
-  total_burst_dur <- map_dbl(.x=burst, .f=~ifelse(nrow(.x)>0,
+  total_burst_dur <- purrr::map_dbl(.x=burst, .f=~ifelse(nrow(.x)>0,
                                                 sum(.x$durn),
                                                 0))
 
@@ -235,6 +236,7 @@ burst_poisson_surprise <- function(x) {
 
 # Modified from https://github.com/ellesec/burstanalysis/blob/master/Burst_detection_methods/PS_method.R
 # Returns empty data.frame for no bursts
+#' @export
 PS.method<-function(spike.train, si.thresh=5) {
   si.thresh<-ifelse(is.null(si.thresh), 5, si.thresh)
   burst <- si.find.bursts.thresh(spike.train)

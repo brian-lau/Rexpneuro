@@ -23,9 +23,9 @@ read_eventide <- function(fname = NULL,
                                include_tracker = include_tracker)
     }
     out = list(call = match.call(),
-                   info = map_dfr(obj, ~.x$info),
-                   trial_data = map_dfr(obj, ~.x$trial_data),
-                   tracker_data = map_dfr(obj, ~.x$tracker_data)
+                   info = purrr::map_dfr(obj, ~.x$info),
+                   trial_data = purrr::map_dfr(obj, ~.x$trial_data),
+                   tracker_data = purrr::map_dfr(obj, ~.x$tracker_data)
     )
 
     if (is_empty(out$tracker_data)) out$tracker_data <- NULL
@@ -119,7 +119,7 @@ read_eventide <- function(fname = NULL,
           df$t <- df$t - t0
           return(df)
         }
-        tracker_data %<>% mutate(data = map(data, ~f(.x, define_trial_onset_time_absolute)))
+        tracker_data %<>% mutate(data = purrr::map(data, ~f(.x, define_trial_onset_time_absolute)))
       }
 
       tracker_data %<>% mutate(id = name, .before = 1)
@@ -422,7 +422,7 @@ read_eventide_tracker <- function(fname,
     df2 <- df %>% group_by(counter_total_trials) %>%
       summarise(start = min(t), end = max(t), .groups = "drop") %>%
       group_by(counter_total_trials) %>%
-      mutate(t_r = map2(start, end, ~myseq(start, end, 1000/Fs))) %>% # times in msec
+      mutate(t_r = purrr::map2(start, end, ~myseq(start, end, 1000/Fs))) %>% # times in msec
       select(-start,-end)
 
     # Join with original data
@@ -432,10 +432,10 @@ read_eventide_tracker <- function(fname,
     myapprox <- function(x, y, xout, method = "linear") {
       tibble(r = approx(x, y, xout, ties = min, na.rm = FALSE, method = method)$y)
     }
-    df2 %<>% mutate(state = map2(data, t_r, ~myapprox(.x$t, as.integer(.x$state), .y$t, method = "constant")),
-                    x = map2(data, t_r, ~myapprox(.x$t, .x$x, .y$t)),
-                    y = map2(data, t_r, ~myapprox(.x$t, .x$y, .y$t)),
-                    pressure = map2(data, t_r, ~myapprox(.x$t, .x$pressure, .y$t))) %>%
+    df2 %<>% mutate(state = purrr::map2(data, t_r, ~myapprox(.x$t, as.integer(.x$state), .y$t, method = "constant")),
+                    x = purrr::map2(data, t_r, ~myapprox(.x$t, .x$x, .y$t)),
+                    y = purrr::map2(data, t_r, ~myapprox(.x$t, .x$y, .y$t)),
+                    pressure = purrr::map2(data, t_r, ~myapprox(.x$t, .x$pressure, .y$t))) %>%
       select(-data) %>%
       unnest(cols = c(t_r, state, x, y, pressure), names_sep = "_") %>%
       rename(t = t_r_t, state = state_r, x = x_r, y = y_r, pressure = pressure_r) %>%
