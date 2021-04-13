@@ -276,7 +276,7 @@ read_eventide_single <- function(fname,
 
   cnames <- colnames(df)
 
-  df %<>% rename(cueset = cue_set_index) %>%
+  df %<>% dplyr::rename(cueset = cue_set_index) %>%
     mutate(cueset = factor(cueset, levels = c(0,1), labels = c("old", "new")))
 
   # convert time to seconds
@@ -302,10 +302,10 @@ read_eventide_single <- function(fname,
                                                 levels = c("go_con", "go", "nogo")),
                              .after = "condition_name")
   df$condition_name[df$condition_name=="go_con"] = "go"
-  df %<>% rename(gng = condition_name) %>%
+  df %<>% dplyr::rename(gng = condition_name) %>%
     mutate(gng = factor(gng, levels = c("nogo", "go")))
 
-  df %<>% rename(is_correct = is_correct_trial, is_incorrect = is_incorrect_trial,
+  df %<>% dplyr::rename(is_correct = is_correct_trial, is_incorrect = is_incorrect_trial,
                  is_abort = is_abort_trial, is_repeat = is_repeat_trial)
 
   df$trial_result_str[df$trial_result_str=="target touch"] = "target_touch"
@@ -399,7 +399,7 @@ read_eventide_tracker <- function(fname,
   df <- readr::read_csv2(fname, col_names = TRUE, col_types = ct, skip = 3, locale(decimal_mark = ","))
 
   df %<>% janitor::remove_empty(which = "cols") %>%
-    rename("counter_total_trials" = "User Field",
+    dplyr::rename("counter_total_trials" = "User Field",
            "state" = "Current Event",
            "t" = "EventIDE TimeStamp",
            "x" = "Gaze CVX",
@@ -438,7 +438,7 @@ read_eventide_tracker <- function(fname,
                     pressure = purrr::map2(data, t_r, ~myapprox(.x$t, .x$pressure, .y$t))) %>%
       select(-data) %>%
       unnest(cols = c(t_r, state, x, y, pressure), names_sep = "_") %>%
-      rename(t = t_r_t, state = state_r, x = x_r, y = y_r, pressure = pressure_r) %>%
+      dplyr::rename(t = t_r_t, state = state_r, x = x_r, y = y_r, pressure = pressure_r) %>%
       mutate(pressure = ifelse(is.na(x), 0, pressure), t = t/1000)
     df <- df2
   } else {
