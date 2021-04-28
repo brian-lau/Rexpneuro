@@ -17,8 +17,7 @@ read_spike_resort <- function(fname) {
   colnames(temp) <- varNames
   cluster_stats <- as_tibble(temp, .name_repair = c("check_unique", "universal")) %>%
     select(-id)
-  #browser()
-  #cluster_stats %<>% naniar::replace_with_na_all(condition = ~is.nan(.x))
+
   cluster_stats %<>% mutate_all(~ifelse(is.nan(.), NA, .))
 
   # Information defining cluster
@@ -28,23 +27,23 @@ read_spike_resort <- function(fname) {
   neuron_info = list()
   for (i in 1:n_cells) {
     neuron_info[[i]] = tibble(name = datList[,,i]$name[[1]],
-                         filename = datList[,,i]$filename[[1]],
-                         channel = datList[,,i]$channel[[1]],
-                         depth = datList[,,i]$depth[[1]],
-                         rel_depth = datList[,,i]$rel.depth[[1]],
-                         area = datList[,,i]$area[[1]],
-                         channel_robust_sd = list(as.vector(datList[,,i]$channel.robust.sd)),
-                         spike_wave_mean = list(as.vector(datList[,,i]$spike.wave.mean)),
-                         spike_wave_sd = list(as.vector(datList[,,i]$spike.wave.mean)),
-                         neg_peak_amp = datList[,,i]$neg.peak.amp[[1]],
-                         neg_peak_t = datList[,,i]$neg.peak.t[[1]],
-                         pos_peak_amp = datList[,,i]$pos.peak.amp[[1]],
-                         pos_peak_t = datList[,,i]$pos.peak.t[[1]],
-                         is_peak_neg = datList[,,i]$is.peak.neg[[1]],
-                         halfpeak_dur = datList[,,i]$halfpeak.dur[[1]],
-                         peak_to_trough_dur = datList[,,i]$peak.to.trough.dur[[1]],
-                         exclude_times = list(datList[,,i]$exclude.times)
-                         )
+                              filename = datList[,,i]$filename[[1]],
+                              channel = datList[,,i]$channel[[1]],
+                              depth = datList[,,i]$depth[[1]],
+                              rel_depth = datList[,,i]$rel.depth[[1]],
+                              area = datList[,,i]$area[[1]],
+                              channel_robust_sd = list(as.vector(datList[,,i]$channel.robust.sd)),
+                              spike_wave_mean = list(as.vector(datList[,,i]$spike.wave.mean)),
+                              spike_wave_sd = list(as.vector(datList[,,i]$spike.wave.mean)),
+                              neg_peak_amp = datList[,,i]$neg.peak.amp[[1]],
+                              neg_peak_t = datList[,,i]$neg.peak.t[[1]],
+                              pos_peak_amp = datList[,,i]$pos.peak.amp[[1]],
+                              pos_peak_t = datList[,,i]$pos.peak.t[[1]],
+                              is_peak_neg = datList[,,i]$is.peak.neg[[1]],
+                              halfpeak_dur = datList[,,i]$halfpeak.dur[[1]],
+                              peak_to_trough_dur = datList[,,i]$peak.to.trough.dur[[1]],
+                              exclude_times = list(datList[,,i]$exclude.times)
+    )
   }
   neuron_info <- bind_rows(neuron_info)
 
