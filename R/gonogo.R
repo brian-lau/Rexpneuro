@@ -86,8 +86,8 @@ read_eventide <- function(fname = NULL,
   } else {
     # Read session data
     dat <- furrr::future_map(paste(basedir, fnames, sep = .Platform$file.sep), read_eventide_single, ...)
-    #trial_data = furrr::future_map_dfr(dat, "trial_data", .id = "session")
     #dat <- purrr::map(paste(basedir, fnames, sep = .Platform$file.sep), read_eventide_single, ...)
+    #trial_data = furrr::future_map_dfr(dat, "trial_data", .id = "session")
     trial_data = purrr::map_dfr(dat, "trial_data", .id = "session")
     info <- tibble::tibble(session = unique(trial_data$session),
                            version = purrr::map_chr(dat, "version"),
@@ -343,12 +343,14 @@ read_eventide_single <- function(fname,
 
   if (zero_trial_start_time) {
     df %<>% mutate(define_trial_onset_time_absolute = define_trial_onset_time, .before = define_trial_onset_time)
-    shift = df$define_trial_onset_time
-    df %<>% mutate(across(ends_with("_onset_time"), ~purrr::map2_dbl(.x, shift, ~.x - .y)))
+    #shift = df$define_trial_onset_time
+    #df %<>% mutate(across(ends_with("_onset_time"), ~purrr::map2_dbl(.x, shift, ~.x - .y)))
+    df %<>% mutate(across(ends_with("_onset_time"), ~ .x - define_trial_onset_time))
 
     # Remove negative times occuring on trials where certain events don't happen due to error/abort,
     # and the previous stored time is written in it's place.
-    df %<>% mutate(across(ends_with("_onset_time"), ~purrr::map_dbl(.x, ~ifelse(.x<0, NA, .x))))
+    #df %<>% mutate(across(ends_with("_onset_time"), ~purrr::map_dbl(.x, ~ifelse(.x<0, NA, .x))))
+    df %>% mutate(across(ends_with("_onset_time"), ~ifelse(.x<0, NA, .x)))
   }
 
   out$trial_data <- df
