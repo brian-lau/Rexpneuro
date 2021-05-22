@@ -29,6 +29,8 @@ Imports:
     pals,
     zoo,
     KernSmooth
+Remotes:
+    sje30/sjemea
 License: What license is it under?
 Encoding: UTF-8
 LazyData: true

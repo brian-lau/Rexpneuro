@@ -219,7 +219,9 @@ burst_poisson_surprise <- function(x) {
 
   frac_spks_in_burst <- spks_in_burst/total_spks
 
+  # Firing rate in trial
   fr <- total_spks/unlist(trial_dur)
+
   fr_in_burst <- spks_in_burst/total_burst_dur
   fr_out_burst <- (total_spks - spks_in_burst)/(unlist(trial_dur) - total_burst_dur)
 
@@ -229,7 +231,7 @@ burst_poisson_surprise <- function(x) {
                     burst_isi = mean(isi, na.rm = T),
                     burst_SI = mean(SI, na.rm = T),
                     burst_frac_spks_in_burst = mean(frac_spks_in_burst, na.rm = T),
-                    fr = mean(fr, na.rm = T),
+                    fr_trial = mean(fr, na.rm = T),
                     fr_in_burst = mean(fr_in_burst, na.rm = T),
                     fr_out_burst = mean(fr_out_burst, na.rm = T)))
 }
@@ -270,9 +272,11 @@ si.find.bursts.thresh<- function (spikes, debug = FALSE)
   nspikes = length(spikes)
   mean.isi = mean(diff(spikes))
   threshold = mean.isi/2
+  #burst.isi.max <- NULL #### ADDED BL
   n = 1
   max.bursts <- floor(nspikes/3)
   bursts <- matrix(NA, nrow = max.bursts, ncol = burst.info.len)
+  #bursts <- matrix(NA, nrow = max.bursts, ncol = 5)
   burst <- 0
   while (n < nspikes - 2) {
     if (debug)

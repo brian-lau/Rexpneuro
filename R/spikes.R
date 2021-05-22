@@ -17,8 +17,7 @@ read_spike_resort <- function(fname) {
   colnames(temp) <- varNames
   cluster_stats <- as_tibble(temp, .name_repair = c("check_unique", "universal")) %>%
     select(-id)
-  #browser()
-  #cluster_stats %<>% naniar::replace_with_na_all(condition = ~is.nan(.x))
+
   cluster_stats %<>% mutate_all(~ifelse(is.nan(.), NA, .))
 
   # Information defining cluster
@@ -28,23 +27,23 @@ read_spike_resort <- function(fname) {
   neuron_info = list()
   for (i in 1:n_cells) {
     neuron_info[[i]] = tibble(name = datList[,,i]$name[[1]],
-                         filename = datList[,,i]$filename[[1]],
-                         channel = datList[,,i]$channel[[1]],
-                         depth = datList[,,i]$depth[[1]],
-                         rel_depth = datList[,,i]$rel.depth[[1]],
-                         area = datList[,,i]$area[[1]],
-                         channel_robust_sd = list(as.vector(datList[,,i]$channel.robust.sd)),
-                         spike_wave_mean = list(as.vector(datList[,,i]$spike.wave.mean)),
-                         spike_wave_sd = list(as.vector(datList[,,i]$spike.wave.mean)),
-                         neg_peak_amp = datList[,,i]$neg.peak.amp[[1]],
-                         neg_peak_t = datList[,,i]$neg.peak.t[[1]],
-                         pos_peak_amp = datList[,,i]$pos.peak.amp[[1]],
-                         pos_peak_t = datList[,,i]$pos.peak.t[[1]],
-                         is_peak_neg = datList[,,i]$is.peak.neg[[1]],
-                         halfpeak_dur = datList[,,i]$halfpeak.dur[[1]],
-                         peak_to_trough_dur = datList[,,i]$peak.to.trough.dur[[1]],
-                         exclude_times = list(datList[,,i]$exclude.times)
-                         )
+                              filename = datList[,,i]$filename[[1]],
+                              channel = datList[,,i]$channel[[1]],
+                              depth = datList[,,i]$depth[[1]],
+                              rel_depth = datList[,,i]$rel.depth[[1]],
+                              area = datList[,,i]$area[[1]],
+                              channel_robust_sd = list(as.vector(datList[,,i]$channel.robust.sd)),
+                              spike_wave_mean = list(as.vector(datList[,,i]$spike.wave.mean)),
+                              spike_wave_sd = list(as.vector(datList[,,i]$spike.wave.mean)),
+                              neg_peak_amp = datList[,,i]$neg.peak.amp[[1]],
+                              neg_peak_t = datList[,,i]$neg.peak.t[[1]],
+                              pos_peak_amp = datList[,,i]$pos.peak.amp[[1]],
+                              pos_peak_t = datList[,,i]$pos.peak.t[[1]],
+                              is_peak_neg = datList[,,i]$is.peak.neg[[1]],
+                              halfpeak_dur = datList[,,i]$halfpeak.dur[[1]],
+                              peak_to_trough_dur = datList[,,i]$peak.to.trough.dur[[1]],
+                              exclude_times = list(datList[,,i]$exclude.times)
+    )
   }
   neuron_info <- bind_rows(neuron_info)
 
@@ -227,10 +226,10 @@ drop_neurons <- function(x, group_info, min_trial = 50) {
 
 #' @export
 spks_in_window <- function(obj,
-                           align = "cue_onset_time",
+                           align = "cue_onset_time", # must exist in obj$trial_data
                            t_start = -0.5,
                            t_end = 0,
-                           binwidth = t_end,
+                           binwidth = t_end - t_start,
                            mask_by_quality = TRUE
 ) {
   # Pivot spike quality
@@ -249,12 +248,24 @@ spks_in_window <- function(obj,
     filter(m$mask > 0) %>%
     mutate(times2 = in_window(times, t_start, t_end)) # Drop spikes outside of window
 
+
   # Create unique label for neurons
   t %<>%
     mutate(uname = fct_cross(as_factor(id), as_factor(session), name), .after = name) %>%
     arrange(id, session, uname)
 
   return(t %>% ungroup())
+}
+
+#' @export
+shift_events <- function(obj,
+                         align = "cue_onset_time" # must exist in obj$trial_data
+) {
+  # Align behavioral event times
+  obj$trial_data %>%
+    bind_cols(shift = obj[["trial_data"]][[align]]) %>%
+    mutate(across(ends_with("_time"), ~ .x - shift)) %>%
+    select(-shift)
 }
 
 #' @export
@@ -681,4 +692,59 @@ plot_psth <- function(psth_obj, rname, save = FALSE, append_str = '', ...) {
   }
 
   return(p_out)
+}
+
+#' @export
+plot_raster <- function(df,
+                        t = "times",
+                        y = NULL,
+                        color = NULL,
+                        size = 0.2
+) {
+  if (is.null(y)) {
+    df %<>% mutate(ind = row_number())
+    y = "ind"
+  } else {
+    df %<>% bind_cols(ind = obj[[y]])
+  }
+
+  df2 <- df %>%
+    unnest(cols = t)
+
+  p = ggplot(df2, aes_string(color = color)) +
+    geom_segment(aes_string(t, y, xend = t, yend = paste0(y,"+1")), size = size)
+
+  p <- p + scale_x_continuous(expand = c(0, 0)) + scale_y_continuous(expand = c(0, 0))
+}
+
+#' @export
+decorate_raster <- function(p,
+                            t = "times",
+                            tag = "liftoff_onset_time",
+                            shape = 16,
+                            color = "red",
+                            size = 1
+) {
+  df <- p$data %>% nest(data = t)
+  p <- p + geom_point(data = df,
+                      aes_string(tag, "ind"),
+                      shape = shape,
+                      color = color,
+                      size = size)
+}
+
+#' @export
+label_raster <- function(p,
+                         t = "times",
+                         t_loc = 0.5,
+                         t_width = 0.2,
+                         tag = "condition",
+                         shape = 16,
+                         color = "red",
+                         size = 1
+) {
+  df2 <- p$data %>% nest(data = t)
+  p <- p + geom_rect(data = df2,
+                     aes_string(xmin = "t_loc", xmax = "t_loc + t_width", ymin = "ind", ymax = "ind+1",
+                         color = tag, fill = tag))
 }
