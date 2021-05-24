@@ -150,19 +150,19 @@ drop_abort_trials <- function(x, ...) {
 drop_abort_trials.GNGeventide <- function(obj, ...) {
   obj$trial_data %<>% filter(!is_abort)
 
-  if (!is_empty(obj$tracker_data))
+  if (!purrr::is_empty(obj$tracker_data))
     obj$tracker_data %<>% semi_join(obj$trial_data,
                                     by = c("id", "session", "counter_total_trials"))
 
-  if (!is_empty(obj$spike_mask))
+  if (!purrr::is_empty(obj$spike_mask))
     obj$spike_mask %<>% semi_join(obj$trial_data,
                                   by = c("id", "session", "counter_total_trials"))
 
-  if (!is_empty(obj$spike_times))
+  if (!purrr::is_empty(obj$spike_times))
     obj$spike_times %<>% semi_join(obj$trial_data,
                                    by = c("id", "session", "counter_total_trials"))
 
-  if (!is_empty(obj$trial_duration))
+  if (!purrr::is_empty(obj$trial_duration))
     obj$trial_duration %<>% semi_join(obj$trial_data,
                                    by = c("id", "session", "counter_total_trials"))
 

@@ -251,7 +251,7 @@ spks_in_window <- function(obj,
 
   # Create unique label for neurons
   t %<>%
-    mutate(uname = fct_cross(as_factor(id), as_factor(session), name), .after = name) %>%
+    mutate(uname = forcats::fct_cross(forcats::as_factor(id), forcats::as_factor(session), name), .after = name) %>%
     arrange(id, session, uname)
 
   return(t %>% ungroup())
@@ -273,8 +273,8 @@ unnest_spike_mask <- function(df) {
   df %>%
     group_by(id, session) %>%
     group_modify(function(x, y) x %>%
-                   unnest(cols = c(neurons)) %>%
-                   pivot_longer(!counter_total_trials, values_to = "mask")) %>%
+                   tidyr::unnest(cols = c(neurons)) %>%
+                   tidyr::pivot_longer(!counter_total_trials, values_to = "mask")) %>%
     ungroup()
 }
 
@@ -283,8 +283,8 @@ unnest_spike_times <- function(df) {
   df %>%
     group_by(id, session) %>%
     group_modify(function(x, y) x %>%
-                   unnest(cols = c(neurons)) %>%
-                   pivot_longer(starts_with("AD"), values_to = "times")) %>%
+                   tidyr::unnest(cols = c(neurons)) %>%
+                   tidyr::pivot_longer(starts_with("AD"), values_to = "times")) %>%
     ungroup()
 }
 
@@ -354,7 +354,7 @@ get_psth <- function(obj,
 
   # Create unique label for neurons
   t %<>%
-    mutate(uname = fct_cross(as_factor(id), as_factor(session), name), .after = name) %>%
+    mutate(uname = forcats::fct_cross(forcats::as_factor(id), forcats::as_factor(session), name), .after = name) %>%
     arrange(id, session, uname)
 
   # Add trial, time-independent covariates
@@ -459,7 +459,7 @@ prep_for_model <- function(obj,
 
   # Create unique label for neurons
   t %<>%
-    mutate(uname = fct_cross(as_factor(id), as_factor(session), name), .after = name) %>%
+    mutate(uname = forcats::fct_cross(forcats::as_factor(id), forcats::as_factor(session), name), .after = name) %>%
     arrange(id, session, uname)
 
   # Count spikes in windows
@@ -568,6 +568,7 @@ plot_psth <- function(psth_obj, rname, save = FALSE, append_str = '', ...) {
   library(scales)
   library(pals)
   library(ggplot2)
+  library(forcats)
 
   df = psth_obj$psth_df %>%
     filter(uname == rname) %>%
