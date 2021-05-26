@@ -368,9 +368,9 @@ get_psth <- function(obj,
               by = c("id", "session", "counter_total_trials")) %>%
     mutate(across(all_of(add_trial_time_vars), ~.x - shift))
 
-  if (drop_abort_trials) t %<>% filter(!is_abort)
+  if (drop_abort_trials & ("is_abort" %in% add_trial_vars)) t %<>% dplyr::filter(!is_abort)
 
-  if (drop_incorrect_trials) t %<>% filter(!is_incorrect)
+  if (drop_incorrect_trials & ("is_incorrect" %in% add_trial_vars)) t %<>% dplyr::filter(!is_incorrect)
 
   if (min_trial > 0) t %<>% group_modify(drop_neurons, min_trial = min_trial)
 
@@ -396,8 +396,8 @@ get_psth <- function(obj,
     h = h,
     pad = pad,
     mask_by_quality = mask_by_quality,
-    drop_abort_trials = drop_abort_trials,
-    drop_incorrect_trials = drop_incorrect_trials,
+    drop_abort_trials = drop_abort_trials & ("is_abort" %in% add_trial_vars),
+    drop_incorrect_trials = drop_incorrect_trials & ("is_incorrect" %in% add_trial_vars),
     psth_df = t
   )
 
