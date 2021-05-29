@@ -142,6 +142,34 @@ read_eventide <- function(fname = NULL,
 }
 
 #' @export
+drop_incorrect_trials <- function(x, ...) {
+  UseMethod("drop_incorrect_trials", x)
+}
+
+#' @export
+drop_incorrect_trials.GNGeventide <- function(obj, ...) {
+  obj$trial_data %<>% dplyr::filter(!is_incorrect)
+
+  if (!purrr::is_empty(obj$tracker_data))
+    obj$tracker_data %<>% dplyr::semi_join(obj$trial_data,
+                                           by = c("id", "session", "counter_total_trials"))
+
+  if (!purrr::is_empty(obj$spike_mask))
+    obj$spike_mask %<>% dplyr::semi_join(obj$trial_data,
+                                         by = c("id", "session", "counter_total_trials"))
+
+  if (!purrr::is_empty(obj$spike_times))
+    obj$spike_times %<>% dplyr::semi_join(obj$trial_data,
+                                          by = c("id", "session", "counter_total_trials"))
+
+  if (!purrr::is_empty(obj$trial_duration))
+    obj$trial_duration %<>% dplyr::semi_join(obj$trial_data,
+                                             by = c("id", "session", "counter_total_trials"))
+
+  return(obj)
+}
+
+#' @export
 drop_abort_trials <- function(x, ...) {
   UseMethod("drop_abort_trials", x)
 }
