@@ -44,45 +44,34 @@ batch_auc <- function(datafile = "~/ownCloud/ForFarah/pallidum_GNG.Rdata",
 
   df_psth %<>% filter(condition %in% keep_conditions)
 
-  if (comparison == "block") {
-    n_trials <- df_psth %>%
-      group_by(uname, condition) %>%
-      count() %>%
-      pivot_wider(names_from = condition, values_from = n)
-    exclude <- n_trials %>%
-      mutate(good = (go>min_trials_per_cond) & (go_con>min_trials_per_cond)) %>%
-      filter(good %in% c(FALSE,NA)) %>%
-      pull(uname)
-  } else if (comparison == "gng") {
-    n_trials <- df_psth %>%
-      group_by(uname, condition) %>%
-      count() %>%
-      pivot_wider(names_from = condition, values_from = n)
-    exclude <- n_trials %>%
-      mutate(good = (go>min_trials_per_cond) & (nogo>min_trials_per_cond)) %>%
-      filter(good %in% c(FALSE,NA)) %>%
-      pull(uname)
-  } else if (comparison == "direction") {
-    n_trials <- df_psth %>%
-      group_by(uname, direction) %>%
-      count() %>%
-      pivot_wider(names_from = direction, values_from = n)
-    exclude <- n_trials %>%
-      mutate(good = (ipsi>min_trials_per_cond) & (contra>min_trials_per_cond)) %>%
-      filter(good %in% c(FALSE,NA)) %>%
-      pull(uname)
-  }
-
-  if (exists("exclude")) {
-    df_psth %<>% filter(!uname %in% exclude)
-  }
+  n_trials <- df_psth %>%
+    group_by(across(all_of(c("uname",split_factor)))) %>%
+    count() %>%
+    pivot_wider(names_from = condition, values_from = n, names_prefix = "n_")
 
   tic()
   df_psth %<>%
-    # drop some columns to save memory
+    # drop some columns to save memory?
+    left_join(n_trials, by = "uname") %>%
     mutate(t = list(psth_obj$t)) %>%
     unnest(cols = c(psth, t))
   toc()
+
+  # Get an estimate of the pre-cue firing rate as an estimate of baseline for z-scoring
+  pre_cue <- spks_in_window(obj, align = "cue_onset_time", t_start = -0.5, t_end = 0)
+  # Make sure we have matching neurons
+  pre_cue %<>% semi_join(df_psth, by = c("id", "session", "counter_total_trials"))
+
+  firing_rate_mean <- function(x) {
+    n <- purrr::map_dbl(x,length)
+    mean(n)
+  }
+  firing_rate_sd <- function(x) {
+    n <- purrr::map_dbl(x,length)
+    sd(n)
+  }
+  pre_cue %<>% group_by(uname) %>% summarise(fr_bl_mean = firing_rate_mean(times2),
+                                             fr_bl_sd = firing_rate_sd(times2))
 
   ## Drop time samples following subsequent event
   if (!is.null(drop_after_event)) {
@@ -98,24 +87,23 @@ batch_auc <- function(datafile = "~/ownCloud/ForFarah/pallidum_GNG.Rdata",
     }
   }
 
+  tic()
   if (bootstrap_auc) {
-    tic()
     df_auc <- run_auc_boot(df_psth, split_factor = split_factor, metric = "psth", lev = lev, dir = ">")
-    toc()
-
-    df_auc %<>%
-      left_join(neuron_info %>% select(id, session, uname, rel_depth, area, type), by = "uname") %>%
-      ungroup()
+    df_auc %<>% chop(cols = c(t:p_value))
   } else {
-    tic()
     df_auc <- run_auc(df_psth, split_factor = split_factor, metric = "psth", lev = lev, dir = ">")
-    toc()
-    df_auc %<>%
-      left_join(neuron_info %>% select(id, session, uname, rel_depth, area, type), by = "uname") %>%
-      select(-roc)
+    df_auc %<>% chop(cols = c(t:ci_hi))
   }
+  toc()
 
-  df_auc %<>% relocate(id, session)
+  df_auc %<>%
+    ungroup() %>%
+    left_join(neuron_info %>% select(id, session, uname, rel_depth, area, type), by = "uname")
+
+  df_auc %<>% left_join(n_trials, by = "uname")
+
+  df_auc %<>% relocate(id, session, uname, rel_depth, area, type)
 
   df_auc %<>% mutate(area_type = interaction(area,type), .after = "type")
 
@@ -126,12 +114,13 @@ batch_auc <- function(datafile = "~/ownCloud/ForFarah/pallidum_GNG.Rdata",
       group_by(uname, get(split_factor), t) %>%
       summarise(psth_sd = list(matrixStats::colSds(do.call(rbind, psth))),
                 psth_mean = list(colMeans(do.call(rbind, psth))) ) %>%
-      ungroup()
+      ungroup() %>%
+      left_join(pre_cue, by = "uname")
 
     df_psth_mean %<>% left_join(df_auc %>% select(uname, area, type, area_type), by = "uname")
 
-    save(df_psth_mean, file = paste0(str_split(filename, ".Rdata")[[1]][[1]], "_psth_mean.Rdata"))
-    save(df_auc, file = filename)
+    saveRDS(df_psth_mean, paste0(str_split(filename, ".rds")[[1]][[1]], "_psth_mean.rds"))
+    saveRDS(df_auc, filename)
   }
 }
 
@@ -144,30 +133,55 @@ run_auc <- function(df,
 ) {
   library(pROC)
 
+  if (dir == ">") {
+    pos_class <- lev[1]
+  } else if (dir == "<") {
+    pos_class <- lev[2]
+  }
+
+  get_auc <- function(x, y, metric, split_factor, pos_class, min_cases) {
+    n_pos <- sum(!is.na(x[[metric]]) & (x[[split_factor]] == pos_class))
+    n_neg <- sum(!is.na(x[[metric]]) & (x[[split_factor]] != pos_class))
+
+    if ((n_pos>min_cases) & (n_neg>min_cases)) {
+      roc <- roc(x[[split_factor]], x[[metric]], levels = lev, direction = dir)
+      ci <- ci.auc(roc)
+      auc <- roc$auc
+      ci_low <- temp$CI.Performance[1]
+      ci_hi <- temp$CI.Performance[2]
+    } else {
+      auc <- NA
+      ci_low <- NA
+      ci_hi <- NA
+    }
+
+    data.frame(n_pos=n_pos, n_neg=n_neg, auc=auc,
+               ci_low=ci_low, ci_hi=ci_hi)
+  }
+
   df_auc <- df %>%
     group_by(uname, t) %>%
-    summarise(roc = list(roc(.data[[split_factor]], .data[[metric]], levels = lev, direction = dir))) %>%
-    mutate(auc = purrr::map_dbl(roc, ~.x$auc)) %>%
-    mutate(ci = purrr::map(roc, ~ci.auc(.x))) %>%
-    unnest_wider(col = ci, names_sep = "_") %>%
-    rename(ci_low = ci_1, auc_median = ci_2, ci_hi = ci_3) %>%
-    ungroup()
-}
-
-#' @export
-percentile_p <- function(x, h0) {
-  half.pval <- mean(x > h0) + 0.5*mean(x == 0.5)
-  2*min(c(half.pval, 1 - half.pval))
+    group_modify(~get_auc(.x, metric = metric, split_factor = split_factor,
+                          pos_class = pos_class, min_cases = min_cases, nboot = nboot),
+                 .keep = TRUE)
+  # df_auc <- df %>%
+  #   group_by(uname, t) %>%
+  #   summarise(roc = list(roc(.data[[split_factor]], .data[[metric]], levels = lev, direction = dir))) %>%
+  #   mutate(auc = purrr::map_dbl(roc, ~.x$auc)) %>%
+  #   mutate(ci = purrr::map(roc, ~ci.auc(.x))) %>%
+  #   unnest_wider(col = ci, names_sep = "_") %>%
+  #   rename(ci_low = ci_1, auc_median = ci_2, ci_hi = ci_3) %>%
+  #   ungroup()
 }
 
 #' @export
 run_auc_boot <- function(df,
-                          split_factor = "condition",
-                          metric = "psth",
-                          lev = c("go", "nogo"),
-                          dir = ">",
-                          nboot = 1000,
-                          min_cases = 1
+                         split_factor = "condition",
+                         metric = "psth",
+                         lev = c("go", "nogo"),
+                         dir = ">",
+                         nboot = 1000,
+                         min_cases = 1
 ) {
   library(fbroc)
 
@@ -209,7 +223,6 @@ run_auc_boot <- function(df,
     group_modify(~get_auc(.x, metric = metric, split_factor = split_factor,
                           pos_class = pos_class, min_cases = min_cases, nboot = nboot),
                  .keep = TRUE)
-
 }
 
 
@@ -251,8 +264,8 @@ find_auc_change <- function(x, y, min_runlength = 10) {
 }
 
 #' @export
-find_auc_change_by_p <- function(x, y, p_thresh = 0.05, min_runlength = 10) {
-  ind <- (x$t > 0.01) & (x$t <= 0.5)
+find_auc_change_by_p <- function(x, y, t_min, t_max, p_thresh = 0.05, min_runlength = 10) {
+  ind <- (x$t >= t_min) & (x$t <= t_max)
 
   min_val <- min(x$auc[ind])
   max_val <- max(x$auc[ind])

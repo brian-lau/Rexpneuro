@@ -21,3 +21,8 @@ colormaps <- function(paper = "pallidum") {
   list(Type = type, AreaType = area_type, Id = id)
 }
 
+#' @export
+percentile_p <- function(x, h0) {
+  half.pval <- mean(x > h0) + 0.5*mean(x == 0.5)
+  2*min(c(half.pval, 1 - half.pval))
+}
