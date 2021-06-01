@@ -9,7 +9,7 @@ batch_auc <- function(datafile = "~/ownCloud/ForFarah/pallidum_GNG.Rdata",
                       t_start = -0.2,
                       t_end = 0.4,
                       psth_par = list(h = 0.02, dt = 0.005, pad = 30),
-                      min_trials_per_cond = 5,
+                      #min_trials_per_cond = 5,
                       bootstrap_auc = TRUE,
                       filename = NULL
 ) {
@@ -47,7 +47,7 @@ batch_auc <- function(datafile = "~/ownCloud/ForFarah/pallidum_GNG.Rdata",
   n_trials <- df_psth %>%
     group_by(across(all_of(c("uname",split_factor)))) %>%
     count() %>%
-    pivot_wider(names_from = condition, values_from = n, names_prefix = "n_")
+    pivot_wider(names_from = split_factor, values_from = n, names_prefix = "n_")
 
   tic()
   df_psth %<>%
@@ -121,6 +121,27 @@ batch_auc <- function(datafile = "~/ownCloud/ForFarah/pallidum_GNG.Rdata",
 
     saveRDS(df_psth_mean, paste0(str_split(filename, ".rds")[[1]][[1]], "_psth_mean.rds"))
     saveRDS(df_auc, filename)
+  }
+}
+
+#' @export
+batch_find_auc_change <- function(df,
+                                  t_min = -0.2,
+                                  t_max = 0.4,
+                                  min_auc_runlength = 15,  # 15 #(for dt - 0.005)
+                                  use_bootstrap_p = TRUE)
+{
+  df %<>% unnest(cols = c(t, n_pos, n_neg, auc, auc_boot_median, auc_boot_mean, ci_low,
+                          ci_hi, p_value))
+
+  if (use_bootstrap_p) {
+    df_t <- df %>%
+      group_by(uname) %>%
+      group_modify(~find_auc_change_by_p(.x, t_min = t_min, t_max = t_max, min_runlength = min_auc_runlength))
+  } else {
+    df_t <- df %>%
+      group_by(uname) %>%
+      group_modify(~find_auc_change(.x, t_min = t_min, t_max = t_max, min_runlength = min_auc_runlength))
   }
 }
 
