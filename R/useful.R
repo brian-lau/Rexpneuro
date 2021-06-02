@@ -15,7 +15,7 @@ colormaps <- function(paper = "pallidum") {
 
     id <- c("flocky" = "red", "tess" = "black")
 
-    #condition <- c("go_con" = "", "go" = "", "nogo" = "")
+    condition <- c("go_con" = "#228833", "go" = "#4477AA", "nogo" = "#EE6677")
   } else {
 
   }
