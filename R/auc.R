@@ -309,3 +309,313 @@ find_auc_change_by_p <- function(x, y, t_min, t_max, p_thresh = 0.05, min_runlen
   data.frame(min_val = min_val, max_val = max_val,
              t_change = t_change, resp = resp)
 }
+
+#' @export
+merge_t_change <- function(df_t1, # auc detections epoch 1
+                           df_t2, # auc detections epoch 2
+                           t_max1 = 0.3,
+                           t_min2 = -0.2
+) {
+
+  merge_t_change_for_group <- function(df,
+                                       z, # placeholder for group_modify
+                                       t_max1 = 0.3,
+                                       t_min2 = -0.2
+  ) {
+    t_change.x = df$t_change.x
+    resp.x = df$resp.x
+    t_change.y = df$t_change.y
+    resp.y = df$resp.y
+
+    if (!is.na(t_change.x) & (t_change.x <= t_max1)) {
+      # Change in epoch 1,
+      t_change1 <- t_change.x
+      resp1 <- resp.x
+      # Epoch 2 forced to follow, even if sign changes
+      t_change2 <- -0.2 + t_change.x/1e6
+      resp2 <- resp.x
+    } else if (is.na(t_change.x) & !is.na(t_change.y) & (t_change.y >= t_min2)) {
+      # Pinned to left of epoch 2, but not detected in 1
+      t_change2 <- t_change.y
+      resp2 <- resp.y
+      # Epoch 1 forced to follow
+      t_change1 <- t_max1 + t_change.y/1e6
+      resp1 <- resp.y
+    } else {
+      t_change1 = NA
+      resp1 = "none"
+      t_change2 = NA
+      resp2 = "none"
+    }
+
+    data.frame(t_change.x = t_change.x, resp.x = resp.x,
+               t_change.y = t_change.y, resp.y = resp.y,
+               t_change1 = t_change1, resp1 = resp1,
+               t_change2 = t_change2, resp2 = resp2
+    )
+  }
+
+  df <- df_t1 %>%
+    select(uname, t_change, resp) %>%
+    left_join(df_t2 %>%
+                select(uname, t_change, resp), by = "uname")
+
+  df2 <- df %>%
+    group_by(uname) %>%
+    group_modify(~ merge_t_change_for_group(.x, t_max1 = t_max1, t_min2 = t_min2),
+                 .keep = T)
+}
+
+#' @export
+plot_auc_heatmap_pallidum <- function(df_auc
+) {
+  library(ComplexHeatmap) # BiocManager::install("ComplexHeatmap")
+  library(circlize)
+
+  cm = colormaps()
+  hm_colors <- c(cm["AreaType"], cm["Id"])
+
+  # col_fun = circlize::colorRamp2(seq(from=0, to=1, length.out = 9),
+  #                                khroma::colour("BuRd")(9))
+  col_fun = circlize::colorRamp2(seq(from=0, to=1, length.out = 13),
+                                 khroma::colour("BuRd")(13))
+  # col_fun = circlize::colorRamp2(seq(from=0, to=1, length.out = 13),
+  #                                khroma::colour("sunset")(13))
+
+  t_names <- round(df_auc[1,]$t[[1]], digits = 3)
+  t_names[!t_names %in% round(seq(-.2,.7, by = 0.1), digits = 3)] = NA
+  t_names <- as.character(t_names)
+  t_names[is.na(t_names)] <- ""
+
+  gen_heatmap <- function(df,
+                          colormap,
+                          tag,
+                          flip = F,
+                          column_names = NULL,
+                          label_rows = F,
+                          ann_col = NULL,
+                          fix_height = NULL,
+                          show_heatmap_legend = T) {
+    if (nrow(df)==0) {
+      return(NULL)
+    }
+    M <- do.call(rbind, df  %>% pull(auc))
+    t <- df %>% pull(t_change)
+    if (label_rows) {
+      rownames(M) <- df %>% pull(uname)
+    }
+    if (!is.null(column_names)) {
+      colnames(M) <- column_names
+    }
+
+    t_vec <- df[1,]$t[[1]]
+    if (!all(is.na(t))) {
+      #t_ind <- t %>% map_int(~which(.x==df[1,]$t[[1]]))
+      t_ind <- t %>% map_int(~which(abs(t_vec-.x)==min(abs(t_vec-.x))))
+    } else {
+      t_ind <- t
+    }
+
+    if (flip) {
+      M <- apply(M, 2, rev)
+      t <- rev(t)
+      t_ind <- rev(t_ind)
+    }
+
+    if (!is.null(ann_col)) {
+      #row_ha = rowAnnotation(Type = df %>% pull(area_type), show_annotation_name = F, col = ann_col)
+      row_ha = rowAnnotation(AreaType = df %>% pull(area_type), Id = df %>% pull(id), show_annotation_name = F, col = ann_col)
+    } else {
+      row_ha = rowAnnotation(AreaType = df %>% pull(area_type), show_annotation_name = F)
+    }
+
+    hm = Heatmap(M, name = tag, cluster_rows = F, cluster_columns = F,
+                 col = colormap, left_annotation = row_ha, height = fix_height,
+                 show_heatmap_legend = show_heatmap_legend,
+                 row_names_gp = gpar(fontsize = 6),
+                 column_names_gp = gpar(fontsize = 6),
+                 column_names_rot = 0,
+                 column_names_centered = T)
+    list(hm = hm, t = t, t_ind = t_ind)
+  }
+
+  label_rows = F
+  fix_height =  NULL #unit(10, "mm") #
+  hm_gpe_hfd_neg <- gen_heatmap(df_auc %>% filter(area_type=="gpe.hfd", resp=="<"),
+                                tag = "gpe_hfd_neg",
+                                column_names = t_names,
+                                label_rows = label_rows,
+                                colormap = col_fun,
+                                ann_col = hm_colors,
+                                fix_height = fix_height,
+                                show_heatmap_legend = F,
+                                flip =  T)
+  hm_gpe_hfd_pos <- gen_heatmap(df_auc %>% filter(area_type=="gpe.hfd", resp==">"),
+                                tag = "gpe_hfd_pos",
+                                column_names = t_names,
+                                label_rows = label_rows,
+                                colormap = col_fun,
+                                ann_col = hm_colors,
+                                fix_height = fix_height,
+                                show_heatmap_legend = F,
+                                flip =  F)
+  hm_gpe_hfd_ns <- gen_heatmap(df_auc %>% filter(area_type=="gpe.hfd", resp=="none"),
+                               tag = "gpe_hfd_ns",
+                               column_names = t_names,
+                               label_rows = label_rows,
+                               colormap = col_fun,
+                               ann_col = hm_colors,
+                               fix_height = fix_height,
+                               show_heatmap_legend = F,
+                               flip =  F)
+
+  hm_gpe_hfdp_neg <- gen_heatmap(df_auc %>% filter(area_type=="gpe.hfd-p", resp=="<"),
+                                 tag = "gpe_hfdp_neg",
+                                 column_names = t_names,
+                                 label_rows = label_rows,
+                                 colormap = col_fun,
+                                 ann_col = hm_colors,
+                                 fix_height = fix_height,
+                                 show_heatmap_legend = F,
+                                 flip =  T)
+  hm_gpe_hfdp_pos <- gen_heatmap(df_auc %>% filter(area_type=="gpe.hfd-p", resp==">"),
+                                 tag = "gpe_hfdp_pos",
+                                 column_names = t_names,
+                                 label_rows = label_rows,
+                                 colormap = col_fun,
+                                 ann_col = hm_colors,
+                                 fix_height = fix_height,
+                                 show_heatmap_legend = F,
+                                 flip =  F)
+  hm_gpe_hfdp_ns <- gen_heatmap(df_auc %>% filter(area_type=="gpe.hfd-p", resp=="none"),
+                                tag = "gpe_hfdp_ns",
+                                column_names = t_names,
+                                label_rows = label_rows,
+                                colormap = col_fun,
+                                ann_col = hm_colors,
+                                fix_height = fix_height,
+                                show_heatmap_legend = F,
+                                flip =  F)
+
+  hm_gpe_lfd_neg <- gen_heatmap(df_auc %>% filter(area_type=="gpe.lfd", resp=="<"),
+                                tag = "gpe_lfd_neg",
+                                column_names = t_names,
+                                label_rows = label_rows,
+                                colormap = col_fun,
+                                ann_col = hm_colors,
+                                fix_height = fix_height,
+                                show_heatmap_legend = F,
+                                flip =  T)
+  hm_gpe_lfd_pos <- gen_heatmap(df_auc %>% filter(area_type=="gpe.lfd", resp==">"),
+                                tag = "gpe_lfd_pos",
+                                column_names = t_names,
+                                label_rows = label_rows,
+                                colormap = col_fun,
+                                ann_col = hm_colors,
+                                fix_height = fix_height,
+                                show_heatmap_legend = F,
+                                flip =  F)
+  hm_gpe_lfd_ns <- gen_heatmap(df_auc %>% filter(area_type=="gpe.lfd", resp=="none"),
+                               tag = "gpe_lfd_ns",
+                               column_names = t_names,
+                               label_rows = label_rows,
+                               colormap = col_fun,
+                               ann_col = hm_colors,
+                               fix_height = fix_height,
+                               show_heatmap_legend = F,
+                               flip =  F)
+
+  hm_gpe_lfdb_neg <- gen_heatmap(df_auc %>% filter(area_type=="gpe.lfd-b", resp=="<"),
+                                 tag = "gpe_lfdb_neg",
+                                 column_names = t_names,
+                                 label_rows = label_rows,
+                                 colormap = col_fun,
+                                 ann_col = hm_colors,
+                                 fix_height = fix_height,
+                                 show_heatmap_legend = F,
+                                 flip =  T)
+  hm_gpe_lfdb_pos <- gen_heatmap(df_auc %>% filter(area_type=="gpe.lfd-b", resp==">"),
+                                 tag = "gpe_lfdb_pos",
+                                 column_names = t_names,
+                                 label_rows = label_rows,
+                                 colormap = col_fun,
+                                 ann_col = hm_colors,
+                                 fix_height = fix_height,
+                                 show_heatmap_legend = F,
+                                 flip =  F)
+  hm_gpe_lfdb_ns <- gen_heatmap(df_auc %>% filter(area_type=="gpe.lfd-b", resp=="none"),
+                                tag = "gpe_lfdb_ns",
+                                column_names = t_names,
+                                label_rows = label_rows,
+                                colormap = col_fun,
+                                ann_col = hm_colors,
+                                fix_height = fix_height,
+                                show_heatmap_legend = F,
+                                flip =  F)
+
+  hm_gpi_hfd_neg <- gen_heatmap(df_auc %>% filter(area_type=="gpi.hfd", resp=="<"),
+                                tag = "gpi_hfd_neg",
+                                column_names = t_names,
+                                label_rows = label_rows,
+                                colormap = col_fun,
+                                ann_col = hm_colors,
+                                fix_height = fix_height,
+                                show_heatmap_legend = F,
+                                flip =  T)
+  hm_gpi_hfd_pos <- gen_heatmap(df_auc %>% filter(area_type=="gpi.hfd", resp==">"),
+                                tag = "gpi_hfd_pos",
+                                column_names = t_names,
+                                label_rows = label_rows,
+                                colormap = col_fun,
+                                ann_col = hm_colors,
+                                fix_height = fix_height,
+                                show_heatmap_legend = F,
+                                flip =  F)
+  hm_gpi_hfd_ns <- gen_heatmap(df_auc %>% filter(area_type=="gpi.hfd", resp=="none"),
+                               tag = "gpi_hfd_ns",
+                               column_names = t_names,
+                               label_rows = label_rows,
+                               colormap = col_fun,
+                               ann_col = hm_colors,
+                               fix_height = fix_height,
+                               show_heatmap_legend = F,
+                               flip =  F)
+
+  hm_list = hm_gpe_hfd_neg[[1]] %v% hm_gpe_hfd_pos[[1]] %v% hm_gpe_hfd_ns[[1]] %v%
+    hm_gpe_hfdp_neg[[1]] %v% hm_gpe_hfdp_pos[[1]] %v% hm_gpe_hfdp_ns[[1]] %v%
+    hm_gpe_lfd_neg[[1]] %v% hm_gpe_lfd_pos[[1]] %v% hm_gpe_lfd_ns[[1]] %v%
+    hm_gpe_lfdb_neg[[1]] %v% hm_gpe_lfdb_pos[[1]] %v% hm_gpe_lfdb_ns[[1]] %v%
+    hm_gpi_hfd_neg[[1]] %v% hm_gpi_hfd_pos[[1]] %v% hm_gpi_hfd_ns[[1]]
+
+  intra_gap = .2
+  inter_gap = 3
+  gaps = c(rep(intra_gap,2), inter_gap, rep(intra_gap,2), inter_gap, rep(intra_gap,2), inter_gap, rep(intra_gap,2), inter_gap, rep(intra_gap,2))
+  gaps = unit(gaps, "mm")
+
+  auc_legend <- list(Legend(col_fun = col_fun, title = "AUC"))
+  hm_all <- draw(hm_list, gap = gaps, merge_legends = T, heatmap_legend_list = auc_legend, newpage = F)
+  #hm_all <- draw(hm_list, gap = gaps, show_heatmap_legend = F)
+
+  types = c("gpe_hfd", "gpe_hfdp", "gpe_lfd", "gpe_lfdb", "gpi_hfd")
+  resps = c("neg", "pos", "ns")
+
+  for (i in 1:length(types)) {
+    for (j in 1:length(resps)) {
+      decorate_heatmap_body(paste0(types[i], '_', resps[j]), {
+        ind = which(t_names=="0")
+        x = ind/length(t_names)
+        grid.lines(c(x, x), c(0, 1), gp = gpar(lwd = .5, lty = 1))
+      }, slice = 1)
+
+      decorate_heatmap_body(paste0(types[i], '_', resps[j]), {
+        varname <- paste0("hm_", types[i], '_', resps[j])
+        x = get(varname)[[3]]
+        x = x/length(t_names)
+        y = seq(from = 1, to = 0, length.out = length(x))
+        grid.points(x, y, pch = 19, size = unit(.3, "mm"), default.units = "npc")
+      }, slice = 1)
+
+    }
+  }
+}
+
