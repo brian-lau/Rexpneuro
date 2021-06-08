@@ -90,10 +90,10 @@ batch_auc <- function(datafile = "~/ownCloud/ForFarah/pallidum_GNG.Rdata",
   tic()
   if (bootstrap_auc) {
     df_auc <- run_auc_boot(df_psth, split_factor = split_factor, metric = "psth", lev = lev, dir = ">")
-    df_auc %<>% chop(cols = c(t:p_value))
+    df_auc %<>% tidyr::chop(cols = c(t:p_value))
   } else {
     df_auc <- run_auc(df_psth, split_factor = split_factor, metric = "psth", lev = lev, dir = ">")
-    df_auc %<>% chop(cols = c(t:ci_hi))
+    df_auc %<>% tidyr::chop(cols = c(t:ci_hi))
   }
   toc()
 
@@ -110,7 +110,7 @@ batch_auc <- function(datafile = "~/ownCloud/ForFarah/pallidum_GNG.Rdata",
   if (!is.null(filename)) {
     df_psth_mean <- df_psth %>%
       select(id, session, counter_total_trials, uname, split_factor, t, psth) %>%
-      chop(cols = c(t,psth)) %>%
+      tidyr::chop(cols = c(t,psth)) %>%
       group_by(uname, get(split_factor), t) %>%
       summarise(psth_sd = list(matrixStats::colSds(do.call(rbind, psth))),
                 psth_mean = list(colMeans(do.call(rbind, psth))) ) %>%
@@ -334,6 +334,7 @@ merge_t_change <- function(df_t1, # auc detections epoch 1
       # Epoch 2 forced to follow, even if sign changes
       t_change2 <- -0.2 + t_change.x/1e6
       resp2 <- resp.x
+      epoch <- 1
     } else if (is.na(t_change.x) & !is.na(t_change.y) & (t_change.y >= t_min2)) {
       # Pinned to left of epoch 2, but not detected in 1
       t_change2 <- t_change.y
@@ -341,17 +342,20 @@ merge_t_change <- function(df_t1, # auc detections epoch 1
       # Epoch 1 forced to follow
       t_change1 <- t_max1 + t_change.y/1e6
       resp1 <- resp.y
+      epoch <- 2
     } else {
       t_change1 = NA
       resp1 = "none"
       t_change2 = NA
       resp2 = "none"
+      epoch <- NA
     }
 
     data.frame(t_change.x = t_change.x, resp.x = resp.x,
                t_change.y = t_change.y, resp.y = resp.y,
                t_change1 = t_change1, resp1 = resp1,
-               t_change2 = t_change2, resp2 = resp2
+               t_change2 = t_change2, resp2 = resp2,
+               epoch = epoch
     )
   }
 
@@ -369,13 +373,22 @@ merge_t_change <- function(df_t1, # auc detections epoch 1
 #' @export
 plot_auc_heatmap_pallidum <- function(df_auc,
                                       t_start,
-                                      t_end
+                                      t_end,
+                                      body_width = NULL,
+                                      left_annotate = TRUE,
+                                      label_rows = TRUE,
+                                      plot_latency = TRUE,
+                                      ignore_epoch = NULL
 ) {
   library(ComplexHeatmap) # BiocManager::install("ComplexHeatmap")
   library(circlize)
 
   cm = colormaps()
-  hm_colors <- c(cm["AreaType"], cm["Id"])
+  if (left_annotate) {
+    hm_colors <- c(cm["AreaType"], cm["Id"])
+  } else {
+    hm_colors <- NULL
+  }
 
   # col_fun = circlize::colorRamp2(seq(from=0, to=1, length.out = 9),
   #                                khroma::colour("BuRd")(9))
@@ -387,7 +400,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
   df_auc %<>% unnest(cols = c(t, n_pos, n_neg, auc, auc_boot_median, auc_boot_mean, ci_low,
                              ci_hi, p_value))
   df_auc %<>% filter((t>=t_start)&(t<=t_end)) %>%
-    chop(cols = c(t, n_pos, n_neg, auc, auc_boot_median, auc_boot_mean, ci_low,
+    tidyr::chop(cols = c(t, n_pos, n_neg, auc, auc_boot_median, auc_boot_mean, ci_low,
                   ci_hi, p_value))
 
   t_vec <- df_auc[1,]$t[[1]]
@@ -404,7 +417,10 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                           column_names = NULL,
                           label_rows = F,
                           ann_col = NULL,
-                          fix_height = NULL
+                          fix_height = NULL,
+                          fix_width = NULL,
+                          plot_latency = TRUE,
+                          ignore_epoch = NULL
   ) {
     if (nrow(df)==0) {
       return(NULL)
@@ -426,38 +442,51 @@ plot_auc_heatmap_pallidum <- function(df_auc,
       t_ind <- t
     }
 
+    epoch <- df$epoch
     if (flip) {
       M <- apply(M, 2, rev)
       t <- rev(t)
       t_ind <- rev(t_ind)
+      epoch <- rev(epoch)
     }
 
     if (!is.null(ann_col)) {
-      #row_ha = rowAnnotation(Type = df %>% pull(area_type), show_annotation_name = F, col = ann_col)
+      # row_ha = rowAnnotation(AreaType = df %>% pull(area_type), show_annotation_name = F,
+      #                        col = ann_col, show_legend = F,
+      #                        simple_anno_size = unit(4, "mm"))
+      # row_ha = rowAnnotation(AreaType = df %>% pull(area_type), show_annotation_name = F,
+      #                        col = ann_col, show_legend = F,
+      #                        annotation_width = unit(2, "mm"),
+      #                        width = unit(2, "mm"))
       row_ha = rowAnnotation(AreaType = df %>% pull(area_type), Id = df %>% pull(id),
-                             show_annotation_name = F, col = ann_col, show_legend = F)
+                             show_annotation_name = F, col = ann_col, show_legend = F,
+                             simple_anno_size = unit(3, "mm"))
     } else {
-      row_ha = rowAnnotation(AreaType = df %>% pull(area_type), show_annotation_name = F, show_legend = F)
+      row_ha = NULL
     }
 
     hm = Heatmap(M, name = tag, cluster_rows = F, cluster_columns = F,
-                 col = colormap, left_annotation = row_ha, height = fix_height,
+                 col = colormap, left_annotation = row_ha,
+                 height = fix_height,
+                 width = fix_width,
                  show_heatmap_legend = F,
                  row_names_gp = gpar(fontsize = 3),
                  column_names_gp = gpar(fontsize = 6),
                  column_names_rot = 0,
                  column_names_centered = T)
-    # hm = Heatmap(M, name = tag, cluster_rows = F, cluster_columns = F,
-    #              col = colormap, left_annotation = row_ha, height = fix_height,
-    #              show_heatmap_legend = show_heatmap_legend,
-    #              row_names_gp = gpar(fontsize = 6),
-    #              column_names_gp = gpar(fontsize = 6),
-    #              column_names_rot = 0,
-    #              column_names_centered = T)
+
+    if (plot_latency) {
+      if (!is.null(ignore_epoch)) {
+        t[epoch == ignore_epoch] = NA
+        t_ind[epoch == ignore_epoch] = NA
+      }
+    } else {
+      t <- t*NA
+      t_ind <- t_ind*NA
+    }
     list(hm = hm, t = t, t_ind = t_ind)
   }
 
-  label_rows = T
   fix_height =  NULL #unit(10, "mm") #
   hm_gpe_hfd_neg <- gen_heatmap(df_auc %>% filter(area_type=="gpe.hfd", resp=="<"),
                                 tag = "gpe_hfd_neg",
@@ -466,7 +495,10 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                 colormap = col_fun,
                                 ann_col = hm_colors,
                                 fix_height = fix_height,
-                                flip =  T)
+                                fix_width = body_width,
+                                flip =  T,
+                                plot_latency = plot_latency,
+                                ignore_epoch = ignore_epoch)
   hm_gpe_hfd_pos <- gen_heatmap(df_auc %>% filter(area_type=="gpe.hfd", resp==">"),
                                 tag = "gpe_hfd_pos",
                                 column_names = t_names,
@@ -474,7 +506,10 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                 colormap = col_fun,
                                 ann_col = hm_colors,
                                 fix_height = fix_height,
-                                flip =  F)
+                                fix_width = body_width,
+                                flip =  F,
+                                plot_latency = plot_latency,
+                                ignore_epoch = ignore_epoch)
   hm_gpe_hfd_ns <- gen_heatmap(df_auc %>% filter(area_type=="gpe.hfd", resp=="none"),
                                tag = "gpe_hfd_ns",
                                column_names = t_names,
@@ -482,7 +517,10 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                colormap = col_fun,
                                ann_col = hm_colors,
                                fix_height = fix_height,
-                               flip =  F)
+                               fix_width = body_width,
+                               flip =  F,
+                               plot_latency = plot_latency,
+                               ignore_epoch = ignore_epoch)
 
   hm_gpe_hfdp_neg <- gen_heatmap(df_auc %>% filter(area_type=="gpe.hfd-p", resp=="<"),
                                  tag = "gpe_hfdp_neg",
@@ -491,7 +529,10 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                  colormap = col_fun,
                                  ann_col = hm_colors,
                                  fix_height = fix_height,
-                                 flip =  T)
+                                 fix_width = body_width,
+                                 flip =  T,
+                                 plot_latency = plot_latency,
+                                 ignore_epoch = ignore_epoch)
   hm_gpe_hfdp_pos <- gen_heatmap(df_auc %>% filter(area_type=="gpe.hfd-p", resp==">"),
                                  tag = "gpe_hfdp_pos",
                                  column_names = t_names,
@@ -499,7 +540,10 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                  colormap = col_fun,
                                  ann_col = hm_colors,
                                  fix_height = fix_height,
-                                 flip =  F)
+                                 fix_width = body_width,
+                                 flip =  F,
+                                 plot_latency = plot_latency,
+                                 ignore_epoch = ignore_epoch)
   hm_gpe_hfdp_ns <- gen_heatmap(df_auc %>% filter(area_type=="gpe.hfd-p", resp=="none"),
                                 tag = "gpe_hfdp_ns",
                                 column_names = t_names,
@@ -507,7 +551,10 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                 colormap = col_fun,
                                 ann_col = hm_colors,
                                 fix_height = fix_height,
-                                flip =  F)
+                                fix_width = body_width,
+                                flip =  F,
+                                plot_latency = plot_latency,
+                                ignore_epoch = ignore_epoch)
 
   hm_gpe_lfd_neg <- gen_heatmap(df_auc %>% filter(area_type=="gpe.lfd", resp=="<"),
                                 tag = "gpe_lfd_neg",
@@ -516,7 +563,10 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                 colormap = col_fun,
                                 ann_col = hm_colors,
                                 fix_height = fix_height,
-                                flip =  T)
+                                fix_width = body_width,
+                                flip =  T,
+                                plot_latency = plot_latency,
+                                ignore_epoch = ignore_epoch)
   hm_gpe_lfd_pos <- gen_heatmap(df_auc %>% filter(area_type=="gpe.lfd", resp==">"),
                                 tag = "gpe_lfd_pos",
                                 column_names = t_names,
@@ -524,7 +574,10 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                 colormap = col_fun,
                                 ann_col = hm_colors,
                                 fix_height = fix_height,
-                                flip =  F)
+                                fix_width = body_width,
+                                flip =  F,
+                                plot_latency = plot_latency,
+                                ignore_epoch = ignore_epoch)
   hm_gpe_lfd_ns <- gen_heatmap(df_auc %>% filter(area_type=="gpe.lfd", resp=="none"),
                                tag = "gpe_lfd_ns",
                                column_names = t_names,
@@ -532,7 +585,10 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                colormap = col_fun,
                                ann_col = hm_colors,
                                fix_height = fix_height,
-                               flip =  F)
+                               fix_width = body_width,
+                               flip =  F,
+                               plot_latency = plot_latency,
+                               ignore_epoch = ignore_epoch)
 
   hm_gpe_lfdb_neg <- gen_heatmap(df_auc %>% filter(area_type=="gpe.lfd-b", resp=="<"),
                                  tag = "gpe_lfdb_neg",
@@ -541,7 +597,10 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                  colormap = col_fun,
                                  ann_col = hm_colors,
                                  fix_height = fix_height,
-                                 flip =  T)
+                                 fix_width = body_width,
+                                 flip =  T,
+                                 plot_latency = plot_latency,
+                                 ignore_epoch = ignore_epoch)
   hm_gpe_lfdb_pos <- gen_heatmap(df_auc %>% filter(area_type=="gpe.lfd-b", resp==">"),
                                  tag = "gpe_lfdb_pos",
                                  column_names = t_names,
@@ -549,7 +608,10 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                  colormap = col_fun,
                                  ann_col = hm_colors,
                                  fix_height = fix_height,
-                                 flip =  F)
+                                 fix_width = body_width,
+                                 flip =  F,
+                                 plot_latency = plot_latency,
+                                 ignore_epoch = ignore_epoch)
   hm_gpe_lfdb_ns <- gen_heatmap(df_auc %>% filter(area_type=="gpe.lfd-b", resp=="none"),
                                 tag = "gpe_lfdb_ns",
                                 column_names = t_names,
@@ -557,7 +619,10 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                 colormap = col_fun,
                                 ann_col = hm_colors,
                                 fix_height = fix_height,
-                                flip =  F)
+                                fix_width = body_width,
+                                flip =  F,
+                                plot_latency = plot_latency,
+                                ignore_epoch = ignore_epoch)
 
   hm_gpi_hfd_neg <- gen_heatmap(df_auc %>% filter(area_type=="gpi.hfd", resp=="<"),
                                 tag = "gpi_hfd_neg",
@@ -566,7 +631,10 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                 colormap = col_fun,
                                 ann_col = hm_colors,
                                 fix_height = fix_height,
-                                flip =  T)
+                                fix_width = body_width,
+                                flip =  T,
+                                plot_latency = plot_latency,
+                                ignore_epoch = ignore_epoch)
   hm_gpi_hfd_pos <- gen_heatmap(df_auc %>% filter(area_type=="gpi.hfd", resp==">"),
                                 tag = "gpi_hfd_pos",
                                 column_names = t_names,
@@ -574,7 +642,10 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                 colormap = col_fun,
                                 ann_col = hm_colors,
                                 fix_height = fix_height,
-                                flip =  F)
+                                fix_width = body_width,
+                                flip =  F,
+                                plot_latency = plot_latency,
+                                ignore_epoch = ignore_epoch)
   hm_gpi_hfd_ns <- gen_heatmap(df_auc %>% filter(area_type=="gpi.hfd", resp=="none"),
                                tag = "gpi_hfd_ns",
                                column_names = t_names,
@@ -582,7 +653,10 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                colormap = col_fun,
                                ann_col = hm_colors,
                                fix_height = fix_height,
-                               flip =  F)
+                               fix_width = body_width,
+                               flip =  F,
+                               plot_latency = plot_latency,
+                               ignore_epoch = ignore_epoch)
 
   hm_list = hm_gpe_hfd_neg[[1]] %v% hm_gpe_hfd_pos[[1]] %v% hm_gpe_hfd_ns[[1]] %v%
     hm_gpe_hfdp_neg[[1]] %v% hm_gpe_hfdp_pos[[1]] %v% hm_gpe_hfdp_ns[[1]] %v%
@@ -595,15 +669,18 @@ plot_auc_heatmap_pallidum <- function(df_auc,
   gaps = c(rep(intra_gap,2), inter_gap, rep(intra_gap,2), inter_gap, rep(intra_gap,2), inter_gap, rep(intra_gap,2), inter_gap, rep(intra_gap,2))
   gaps = unit(gaps, "mm")
 
-  auc_legend <- list(Legend(labels = names(hm_colors$AreaType),
-                            title = "Type", legend_gp = gpar(fill = hm_colors$AreaType)),
-                     Legend(labels = names(hm_colors$Id),
-                            title = "Id", legend_gp = gpar(fill = hm_colors$Id)),
-                     Legend(col_fun = col_fun, title = "AUC")
-  )
-  hm_all <- draw(hm_list, gap = gaps, merge_legends = F, heatmap_legend_list = auc_legend, newpage = F)
-  #hm_all <- draw(hm_list, gap = gaps, merge_legends = T, heatmap_legend_list = auc_legend)
-  #hm_all <- draw(hm_list, gap = gaps, show_heatmap_legend = F)
+  if (left_annotate) {
+    auc_legend <- list(Legend(labels = names(hm_colors$AreaType),
+                              title = "Type", legend_gp = gpar(fill = hm_colors$AreaType)),
+                       Legend(labels = names(hm_colors$Id),
+                              title = "Id", legend_gp = gpar(fill = hm_colors$Id)),
+                       Legend(col_fun = col_fun, title = "AUC")
+    )
+  } else {
+    auc_legend <- list()
+  }
+
+  hm_all <- ComplexHeatmap::draw(hm_list, gap = gaps, merge_legends = F, heatmap_legend_list = auc_legend, newpage = F)
 
   types = c("gpe_hfd", "gpe_hfdp", "gpe_lfd", "gpe_lfdb", "gpi_hfd")
   resps = c("neg", "pos", "ns")
@@ -620,7 +697,12 @@ plot_auc_heatmap_pallidum <- function(df_auc,
         varname <- paste0("hm_", types[i], '_', resps[j])
         x = get(varname)[[3]]
         x = x/length(t_names)
-        y = seq(from = 1, to = 0, length.out = length(x))
+        #browser()
+        #if (resps[j] == "neg") {
+          #y = seq(from = 0, to = 1, length.out = length(x))
+        #} else {
+          y = seq(from = 1, to = 0, length.out = length(x))
+        #}
         grid.points(x, y, pch = 19, size = unit(.3, "mm"), default.units = "npc")
       }, slice = 1)
 
