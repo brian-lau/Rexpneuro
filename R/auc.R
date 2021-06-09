@@ -129,7 +129,8 @@ batch_find_auc_change <- function(df,
                                   t_min = -0.2,
                                   t_max = 0.4,
                                   min_auc_runlength = 15,  # 15 #(for dt - 0.005)
-                                  use_bootstrap_p = TRUE)
+                                  use_bootstrap_p = TRUE,
+                                  p_adjust_method = "none")
 {
   df %<>% unnest(cols = c(t, n_pos, n_neg, auc, auc_boot_median, auc_boot_mean, ci_low,
                           ci_hi, p_value))
@@ -137,11 +138,15 @@ batch_find_auc_change <- function(df,
   if (use_bootstrap_p) {
     df_t <- df %>%
       group_by(uname) %>%
-      group_modify(~find_auc_change_by_p(.x, t_min = t_min, t_max = t_max, min_runlength = min_auc_runlength))
+      group_modify(~find_auc_change_by_p(.x, t_min = t_min, t_max = t_max,
+                                         min_runlength = min_auc_runlength,
+                                         p_adjust_method = p_adjust_method))
   } else {
     df_t <- df %>%
       group_by(uname) %>%
-      group_modify(~find_auc_change(.x, t_min = t_min, t_max = t_max, min_runlength = min_auc_runlength))
+      group_modify(~find_auc_change(.x, t_min = t_min, t_max = t_max,
+                                    min_runlength = min_auc_runlength,
+                                    p_adjust_method = p_adjust_method))
   }
 }
 
@@ -285,13 +290,15 @@ find_auc_change <- function(x, y, min_runlength = 10) {
 }
 
 #' @export
-find_auc_change_by_p <- function(x, y, t_min, t_max, p_thresh = 0.05, min_runlength = 10) {
+find_auc_change_by_p <- function(x, y, t_min, t_max, p_thresh = 0.05, min_runlength = 10,
+                                 p_adjust_method = "none") {
   ind <- (x$t >= t_min) & (x$t <= t_max)
 
   min_val <- min(x$auc[ind])
   max_val <- max(x$auc[ind])
 
-  ind_sig <- as.logical(filter_runlengths(x$p_value[ind] < p_thresh, min_runlength))
+  p_vec <- p.adjust(x$p_value[ind], method = p_adjust_method)
+  ind_sig <- as.logical(filter_runlengths(p_vec < p_thresh, min_runlength))
 
   s_change <- x$auc[ind][ind_sig][1]
   t_change <- x$t[ind][ind_sig][1]
@@ -378,6 +385,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                       t_end,
                                       body_width = NULL,
                                       left_annotate = TRUE,
+                                      id_annotate = TRUE,
                                       label_rows = TRUE,
                                       plot_latency = TRUE,
                                       ignore_epoch = NULL
@@ -394,8 +402,8 @@ plot_auc_heatmap_pallidum <- function(df_auc,
 
   # col_fun = circlize::colorRamp2(seq(from=0, to=1, length.out = 9),
   #                                khroma::colour("BuRd")(9))
-  col_fun = circlize::colorRamp2(seq(from=0, to=1, length.out = 13),
-                                 khroma::colour("BuRd")(13))
+  col_fun = circlize::colorRamp2(seq(from=0, to=1, length.out = 27),
+                                 khroma::colour("BuRd")(27))
   # col_fun = circlize::colorRamp2(seq(from=0, to=1, length.out = 13),
   #                                khroma::colour("sunset")(13))
 
@@ -403,8 +411,9 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                      auc, auc_boot_median, auc_boot_mean, ci_low,
                                      ci_hi, p_value))
   df_auc %<>% filter((t>=t_start)&(t<=t_end)) %>%
-    tidyr::chop(cols = c(t, n_pos, n_neg, auc, auc_boot_median, auc_boot_mean, ci_low,
-                  ci_hi, p_value))
+    tidyr::chop(cols = c(t, n_pos, n_neg,
+                         auc, auc_boot_median, auc_boot_mean, ci_low,
+                         ci_hi, p_value))
 
   t_vec <- df_auc[1,]$t[[1]]
   t_vec <- t_vec[(t_vec>=t_start) & (t_vec<=t_end)]
@@ -420,6 +429,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                           column_names = NULL,
                           label_rows = F,
                           ann_col = NULL,
+                          id_annotate = F,
                           fix_height = NULL,
                           fix_width = NULL,
                           plot_latency = TRUE,
@@ -457,13 +467,15 @@ plot_auc_heatmap_pallidum <- function(df_auc,
       # row_ha = rowAnnotation(AreaType = df %>% pull(area_type), show_annotation_name = F,
       #                        col = ann_col, show_legend = F,
       #                        simple_anno_size = unit(4, "mm"))
-      # row_ha = rowAnnotation(AreaType = df %>% pull(area_type), show_annotation_name = F,
-      #                        col = ann_col, show_legend = F,
-      #                        annotation_width = unit(2, "mm"),
-      #                        width = unit(2, "mm"))
-      row_ha = rowAnnotation(AreaType = df %>% pull(area_type), Id = df %>% pull(id),
-                             show_annotation_name = F, col = ann_col, show_legend = F,
-                             simple_anno_size = unit(3, "mm"))
+      if (id_annotate) {
+        row_ha = rowAnnotation(AreaType = df %>% pull(area_type), Id = df %>% pull(id),
+                               show_annotation_name = F, col = ann_col, show_legend = F,
+                               simple_anno_size = unit(3, "mm"))
+      } else {
+        row_ha = rowAnnotation(AreaType = df %>% pull(area_type),
+                               show_annotation_name = F, col = ann_col, show_legend = F,
+                               simple_anno_size = unit(3, "mm"))
+      }
     } else {
       row_ha = NULL
     }
@@ -497,6 +509,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                 label_rows = label_rows,
                                 colormap = col_fun,
                                 ann_col = hm_colors,
+                                id_annotate = id_annotate,
                                 fix_height = fix_height,
                                 fix_width = body_width,
                                 flip =  T,
@@ -508,6 +521,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                 label_rows = label_rows,
                                 colormap = col_fun,
                                 ann_col = hm_colors,
+                                id_annotate = id_annotate,
                                 fix_height = fix_height,
                                 fix_width = body_width,
                                 flip =  F,
@@ -519,6 +533,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                label_rows = label_rows,
                                colormap = col_fun,
                                ann_col = hm_colors,
+                               id_annotate = id_annotate,
                                fix_height = fix_height,
                                fix_width = body_width,
                                flip =  F,
@@ -531,6 +546,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                  label_rows = label_rows,
                                  colormap = col_fun,
                                  ann_col = hm_colors,
+                                 id_annotate = id_annotate,
                                  fix_height = fix_height,
                                  fix_width = body_width,
                                  flip =  T,
@@ -542,6 +558,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                  label_rows = label_rows,
                                  colormap = col_fun,
                                  ann_col = hm_colors,
+                                 id_annotate = id_annotate,
                                  fix_height = fix_height,
                                  fix_width = body_width,
                                  flip =  F,
@@ -553,6 +570,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                 label_rows = label_rows,
                                 colormap = col_fun,
                                 ann_col = hm_colors,
+                                id_annotate = id_annotate,
                                 fix_height = fix_height,
                                 fix_width = body_width,
                                 flip =  F,
@@ -565,6 +583,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                 label_rows = label_rows,
                                 colormap = col_fun,
                                 ann_col = hm_colors,
+                                id_annotate = id_annotate,
                                 fix_height = fix_height,
                                 fix_width = body_width,
                                 flip =  T,
@@ -576,6 +595,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                 label_rows = label_rows,
                                 colormap = col_fun,
                                 ann_col = hm_colors,
+                                id_annotate = id_annotate,
                                 fix_height = fix_height,
                                 fix_width = body_width,
                                 flip =  F,
@@ -587,6 +607,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                label_rows = label_rows,
                                colormap = col_fun,
                                ann_col = hm_colors,
+                               id_annotate = id_annotate,
                                fix_height = fix_height,
                                fix_width = body_width,
                                flip =  F,
@@ -599,6 +620,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                  label_rows = label_rows,
                                  colormap = col_fun,
                                  ann_col = hm_colors,
+                                 id_annotate = id_annotate,
                                  fix_height = fix_height,
                                  fix_width = body_width,
                                  flip =  T,
@@ -610,6 +632,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                  label_rows = label_rows,
                                  colormap = col_fun,
                                  ann_col = hm_colors,
+                                 id_annotate = id_annotate,
                                  fix_height = fix_height,
                                  fix_width = body_width,
                                  flip =  F,
@@ -621,6 +644,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                 label_rows = label_rows,
                                 colormap = col_fun,
                                 ann_col = hm_colors,
+                                id_annotate = id_annotate,
                                 fix_height = fix_height,
                                 fix_width = body_width,
                                 flip =  F,
@@ -633,6 +657,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                 label_rows = label_rows,
                                 colormap = col_fun,
                                 ann_col = hm_colors,
+                                id_annotate = id_annotate,
                                 fix_height = fix_height,
                                 fix_width = body_width,
                                 flip =  T,
@@ -644,6 +669,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                 label_rows = label_rows,
                                 colormap = col_fun,
                                 ann_col = hm_colors,
+                                id_annotate = id_annotate,
                                 fix_height = fix_height,
                                 fix_width = body_width,
                                 flip =  F,
@@ -655,6 +681,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                label_rows = label_rows,
                                colormap = col_fun,
                                ann_col = hm_colors,
+                               id_annotate = id_annotate,
                                fix_height = fix_height,
                                fix_width = body_width,
                                flip =  F,
@@ -700,12 +727,9 @@ plot_auc_heatmap_pallidum <- function(df_auc,
         varname <- paste0("hm_", types[i], '_', resps[j])
         x = get(varname)[[3]]
         x = x/length(t_names)
-        #browser()
-        #if (resps[j] == "neg") {
-          #y = seq(from = 0, to = 1, length.out = length(x))
-        #} else {
-          y = seq(from = 1, to = 0, length.out = length(x))
-        #}
+        #y = seq(from = 1, to = 0, length.out = length(x))
+        y = ((length(x)-1):0)/(length(x)) + (1/length(x))/2
+
         grid.points(x, y, pch = 19, size = unit(.3, "mm"), default.units = "npc")
       }, slice = 1)
 
