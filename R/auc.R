@@ -332,7 +332,8 @@ merge_t_change <- function(df_t1, # auc detections epoch 1
       t_change1 <- t_change.x
       resp1 <- resp.x
       # Epoch 2 forced to follow, even if sign changes
-      t_change2 <- -0.2 + t_change.x/1e6
+      t_change2 <- t_min2 - t_change.x/1e6
+      #t_change2 <- t_min2 + t_change.x/1e6
       resp2 <- resp.x
       epoch <- 1
     } else if (is.na(t_change.x) & !is.na(t_change.y) & (t_change.y >= t_min2)) {
@@ -341,6 +342,7 @@ merge_t_change <- function(df_t1, # auc detections epoch 1
       resp2 <- resp.y
       # Epoch 1 forced to follow
       t_change1 <- t_max1 + t_change.y/1e6
+      #t_change1 <- t_max1 - t_change.y/1e6
       resp1 <- resp.y
       epoch <- 2
     } else {
@@ -397,8 +399,9 @@ plot_auc_heatmap_pallidum <- function(df_auc,
   # col_fun = circlize::colorRamp2(seq(from=0, to=1, length.out = 13),
   #                                khroma::colour("sunset")(13))
 
-  df_auc %<>% unnest(cols = c(t, n_pos, n_neg, auc, auc_boot_median, auc_boot_mean, ci_low,
-                             ci_hi, p_value))
+  df_auc %<>% tidyr::unnest(cols = c(t, n_pos, n_neg,
+                                     auc, auc_boot_median, auc_boot_mean, ci_low,
+                                     ci_hi, p_value))
   df_auc %<>% filter((t>=t_start)&(t<=t_end)) %>%
     tidyr::chop(cols = c(t, n_pos, n_neg, auc, auc_boot_median, auc_boot_mean, ci_low,
                   ci_hi, p_value))

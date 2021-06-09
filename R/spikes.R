@@ -532,6 +532,7 @@ regularity <- function(t, R = 0.005) {
 smpsth <- function(t, from, to, ngrid = 1000, h = 0.025, pad = 0, ...) {
   if (length(t) != 0) {
     if (pad) {
+      # Introduce padding to minimize edge artifacts
       dt = (to - from)/ngrid
       from = from - dt*pad
       to = to + dt*pad
