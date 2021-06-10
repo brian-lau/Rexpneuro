@@ -400,7 +400,8 @@ plot_auc_heatmap_pallidum <- function(df_auc,
     hm_colors <- NULL
   }
 
-  # col_fun = circlize::colorRamp2(seq(from=0, to=1, length.out = 9),
+  # breaks = c(-.5, -.4, -.3, -.15, 0, .15, .3, .4, .5) + 0.5
+  # col_fun = circlize::colorRamp2(breaks,
   #                                khroma::colour("BuRd")(9))
   col_fun = circlize::colorRamp2(seq(from=0, to=1, length.out = 27),
                                  khroma::colour("BuRd")(27))
@@ -440,6 +441,11 @@ plot_auc_heatmap_pallidum <- function(df_auc,
     }
     M <- do.call(rbind, df  %>% pull(auc))
     t <- df %>% pull(t_change)
+    if ("t_max" %in% names(df)) {
+      if (!all(is.na(df %>% pull(t_max)))) {
+        t_max <- df %>% pull(t_max)
+      }
+    }
     if (label_rows) {
       rownames(M) <- df %>% pull(uname)
     }
@@ -449,8 +455,10 @@ plot_auc_heatmap_pallidum <- function(df_auc,
 
     t_vec <- df[1,]$t[[1]]
     if (!all(is.na(t))) {
-      #t_ind <- t %>% map_int(~which(.x==df[1,]$t[[1]]))
       t_ind <- t %>% map_int(~which(abs(t_vec-.x)==min(abs(t_vec-.x))))
+      if (exists("t_max")) {
+        t_max_ind <- t_max %>% map_int(~which(abs(t_vec-.x)==min(abs(t_vec-.x))))
+      }
     } else {
       t_ind <- t
     }
@@ -460,6 +468,10 @@ plot_auc_heatmap_pallidum <- function(df_auc,
       M <- apply(M, 2, rev)
       t <- rev(t)
       t_ind <- rev(t_ind)
+      if (exists("t_max")) {
+        t_max <- rev(t_max)
+        t_max_ind <- rev(t_max_ind)
+      }
       epoch <- rev(epoch)
     }
 
@@ -499,7 +511,11 @@ plot_auc_heatmap_pallidum <- function(df_auc,
       t <- t*NA
       t_ind <- t_ind*NA
     }
-    list(hm = hm, t = t, t_ind = t_ind)
+    if (!exists("t_max")) {
+      t_max = rep(NA,length(t))
+      t_max_ind = t_max
+    }
+    list(hm = hm, t = t, t_ind = t_ind, t_max = t_max, t_max_ind = t_max_ind)
   }
 
   fix_height =  NULL #unit(10, "mm") #
@@ -694,8 +710,8 @@ plot_auc_heatmap_pallidum <- function(df_auc,
     hm_gpe_lfdb_neg[[1]] %v% hm_gpe_lfdb_pos[[1]] %v% hm_gpe_lfdb_ns[[1]] %v%
     hm_gpi_hfd_neg[[1]] %v% hm_gpi_hfd_pos[[1]] %v% hm_gpi_hfd_ns[[1]]
 
-  intra_gap = .2
-  inter_gap = 3
+  intra_gap = 0.25
+  inter_gap = 2
   gaps = c(rep(intra_gap,2), inter_gap, rep(intra_gap,2), inter_gap, rep(intra_gap,2), inter_gap, rep(intra_gap,2), inter_gap, rep(intra_gap,2))
   gaps = unit(gaps, "mm")
 
@@ -727,12 +743,19 @@ plot_auc_heatmap_pallidum <- function(df_auc,
         varname <- paste0("hm_", types[i], '_', resps[j])
         x = get(varname)[[3]]
         x = x/length(t_names)
-        #y = seq(from = 1, to = 0, length.out = length(x))
         y = ((length(x)-1):0)/(length(x)) + (1/length(x))/2
 
-        grid.points(x, y, pch = 19, size = unit(.3, "mm"), default.units = "npc")
+        grid.points(x, y, pch = 19, size = unit(0.2, "mm"), default.units = "npc")
       }, slice = 1)
 
+      decorate_heatmap_body(paste0(types[i], '_', resps[j]), {
+        varname <- paste0("hm_", types[i], '_', resps[j])
+        x = get(varname)[[5]]
+        x = x/length(t_names)
+        y = ((length(x)-1):0)/(length(x)) + (1/length(x))/2
+
+        grid.points(x, y, pch = 15, size = unit(0.2, "mm"), default.units = "npc")
+      }, slice = 1)
     }
   }
 }
