@@ -29,7 +29,8 @@ Imports:
     pals,
     zoo,
     KernSmooth,
-    Hmisc
+    Hmisc,
+    rstatix
 Remotes:
     sje30/sjemea
 License: What license is it under?

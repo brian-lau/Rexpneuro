@@ -28,3 +28,16 @@ percentile_p <- function(x, h0) {
   half.pval <- mean(x > h0) + 0.5*mean(x == 0.5)
   2*min(c(half.pval, 1 - half.pval))
 }
+
+#' @export
+find_peaks <- function(x, y, w=1, ...) {
+  #https://stats.stackexchange.com/questions/36309/how-do-i-find-peaks-in-a-dataset
+  #https://rpubs.com/mengxu/peak_detection
+  require(zoo)
+  n <- length(y)
+  y.smooth <- loess(y ~ x, ...)$fitted
+  y.max <- rollapply(zoo(y.smooth), 2*w+1, max, align="center")
+  delta <- y.max - y.smooth[-c(1:w, n+1-1:w)]
+  i.max <- which(delta <= 0) + w
+  list(x=x[i.max], i=i.max, y.hat=y.smooth)
+}
