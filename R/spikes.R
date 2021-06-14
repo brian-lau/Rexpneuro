@@ -299,6 +299,7 @@ get_psth <- function(obj,
                      dt = 0.005,
                      h = 0.025,
                      pad = 5,
+                     shift_kernel = 0,
                      mask_by_quality = TRUE,
                      drop_abort_trials = TRUE,
                      drop_incorrect_trials = TRUE,
@@ -348,7 +349,8 @@ get_psth <- function(obj,
                                            from = t_start,
                                            to = t_end,
                                            ngrid = length(x_eval),
-                                           pad = pad),
+                                           pad = pad,
+                                           shift = shift_kernel),
                            )) %>%
     select(-times)
 
@@ -395,6 +397,7 @@ get_psth <- function(obj,
     dt = dt,
     h = h,
     pad = pad,
+    shift_kernel = shift_kernel,
     mask_by_quality = mask_by_quality,
     drop_abort_trials = drop_abort_trials & ("is_abort" %in% add_trial_vars),
     drop_incorrect_trials = drop_incorrect_trials & ("is_incorrect" %in% add_trial_vars),
@@ -529,7 +532,14 @@ regularity <- function(t, R = 0.005) {
 }
 
 #' @export
-smpsth <- function(t, from, to, ngrid = 1000, h = 0.025, pad = 0, ...) {
+smpsth <- function(t,    # times
+                   from,
+                   to,
+                   ngrid = 1000,
+                   h = 0.025, # bandwidth
+                   pad = 0, # padding (samples) for minimizing edge artifacts
+                   shift = 0, # samples to shift function (e.g., negative to enforce causality), valid of p > 0
+                   ...) {
   if (length(t) != 0) {
     if (pad) {
       # Introduce padding to minimize edge artifacts
@@ -541,7 +551,8 @@ smpsth <- function(t, from, to, ngrid = 1000, h = 0.025, pad = 0, ...) {
     y = KernSmooth::bkde(t, bandwidth = h, range.x = c(from, to),
                      gridsize = ngrid, truncate = TRUE)[["y"]]*length(t)
     if (pad) {
-      y = y[(pad+1):(length(y)-pad)]
+      # should verify that negative shift is less than pad to avoid running off array
+      y = y[(pad+1+shift):(length(y)-pad+shift)]
     }
     return(y)
   } else {

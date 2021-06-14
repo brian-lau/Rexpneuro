@@ -8,8 +8,7 @@ batch_auc <- function(datafile = "~/ownCloud/ForFarah/pallidum_GNG.Rdata",
                       drop_after_event = "liftoff_onset_time",
                       t_start = -0.2,
                       t_end = 0.4,
-                      psth_par = list(h = 0.02, dt = 0.005, pad = 30),
-                      #min_trials_per_cond = 5,
+                      psth_par = list(h = 0.02, dt = 0.005, pad = 30, shift = 0),
                       bootstrap_auc = TRUE,
                       filename = NULL
 ) {
@@ -36,7 +35,8 @@ batch_auc <- function(datafile = "~/ownCloud/ForFarah/pallidum_GNG.Rdata",
 
   # PSTHs
   psth_obj <- get_psth(obj, align = align,
-                       t_start = t_start, t_end = t_end, h = psth_par$h, dt = psth_par$dt, pad = psth_par$pad,
+                       t_start = t_start, t_end = t_end, h = psth_par$h,
+                       dt = psth_par$dt, pad = psth_par$pad, shift = psth_par$shift,
                        min_trial = 0, add_trial_vars = NULL, add_trial_time_vars = NULL)
 
   df_psth <- psth_obj$psth_df %>%
@@ -130,6 +130,7 @@ batch_find_auc_change <- function(df,
                                   t_max = 0.4,
                                   min_auc_runlength = 15,  # 15 #(for dt - 0.005)
                                   use_bootstrap_p = TRUE,
+                                  p_thresh = 0.05,
                                   p_adjust_method = "none")
 {
   df %<>% unnest(cols = c(t, n_pos, n_neg, auc, auc_boot_median, auc_boot_mean, ci_low,
@@ -140,12 +141,14 @@ batch_find_auc_change <- function(df,
       group_by(uname) %>%
       group_modify(~find_auc_change_by_p(.x, t_min = t_min, t_max = t_max,
                                          min_runlength = min_auc_runlength,
+                                         p_thresh = p_thresh,
                                          p_adjust_method = p_adjust_method))
   } else {
     df_t <- df %>%
       group_by(uname) %>%
       group_modify(~find_auc_change(.x, t_min = t_min, t_max = t_max,
                                     min_runlength = min_auc_runlength,
+                                    p_thresh = p_thresh,
                                     p_adjust_method = p_adjust_method))
   }
 }
@@ -716,12 +719,17 @@ plot_auc_heatmap_pallidum <- function(df_auc,
   gaps = unit(gaps, "mm")
 
   if (left_annotate) {
-    auc_legend <- list(Legend(labels = names(hm_colors$AreaType),
-                              title = "Type", legend_gp = gpar(fill = hm_colors$AreaType)),
-                       Legend(labels = names(hm_colors$Id),
-                              title = "Id", legend_gp = gpar(fill = hm_colors$Id)),
-                       Legend(col_fun = col_fun, title = "AUC")
-    )
+    type_legend <- Legend(labels = names(hm_colors$AreaType),
+                          title = "Type", legend_gp = gpar(fill = hm_colors$AreaType))
+
+    if (id_annotate) {
+      id_legend <- Legend(labels = names(hm_colors$Id),
+                          title = "Id", legend_gp = gpar(fill = hm_colors$Id))
+      auc_legend <- list(type_legend, id_legend, Legend(col_fun = col_fun, title = "AUC"))
+    } else {
+      auc_legend <- list(type_legend, Legend(col_fun = col_fun, title = "AUC"))
+    }
+
   } else {
     auc_legend <- list()
   }
@@ -748,14 +756,15 @@ plot_auc_heatmap_pallidum <- function(df_auc,
         grid.points(x, y, pch = 19, size = unit(0.2, "mm"), default.units = "npc")
       }, slice = 1)
 
-      decorate_heatmap_body(paste0(types[i], '_', resps[j]), {
-        varname <- paste0("hm_", types[i], '_', resps[j])
-        x = get(varname)[[5]]
-        x = x/length(t_names)
-        y = ((length(x)-1):0)/(length(x)) + (1/length(x))/2
-
-        grid.points(x, y, pch = 15, size = unit(0.2, "mm"), default.units = "npc")
-      }, slice = 1)
+      # For plotting maximum time
+      # decorate_heatmap_body(paste0(types[i], '_', resps[j]), {
+      #   varname <- paste0("hm_", types[i], '_', resps[j])
+      #   x = get(varname)[[5]]
+      #   x = x/length(t_names)
+      #   y = ((length(x)-1):0)/(length(x)) + (1/length(x))/2
+      #
+      #   grid.points(x, y, pch = 15, size = unit(0.2, "mm"), default.units = "npc")
+      # }, slice = 1)
     }
   }
 }
