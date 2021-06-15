@@ -130,6 +130,7 @@ batch_find_auc_change <- function(df,
                                   t_max = 0.4,
                                   min_auc_runlength = 15,  # 15 #(for dt - 0.005)
                                   use_bootstrap_p = TRUE,
+                                  use_com = F,
                                   p_thresh = 0.05,
                                   p_adjust_method = "none")
 {
@@ -141,6 +142,7 @@ batch_find_auc_change <- function(df,
       group_by(uname) %>%
       group_modify(~find_auc_change_by_p(.x, t_min = t_min, t_max = t_max,
                                          min_runlength = min_auc_runlength,
+                                         use_com = use_com,
                                          p_thresh = p_thresh,
                                          p_adjust_method = p_adjust_method))
   } else {
@@ -293,7 +295,9 @@ find_auc_change <- function(x, y, min_runlength = 10) {
 }
 
 #' @export
-find_auc_change_by_p <- function(x, y, t_min, t_max, p_thresh = 0.05, min_runlength = 10,
+find_auc_change_by_p <- function(x, y, t_min, t_max,
+                                 p_thresh = 0.05, min_runlength = 10,
+                                 use_com = F,
                                  p_adjust_method = "none") {
   ind <- (x$t >= t_min) & (x$t <= t_max)
 
@@ -301,10 +305,21 @@ find_auc_change_by_p <- function(x, y, t_min, t_max, p_thresh = 0.05, min_runlen
   max_val <- max(x$auc[ind])
 
   p_vec <- p.adjust(x$p_value[ind], method = p_adjust_method)
-  ind_sig <- as.logical(filter_runlengths(p_vec < p_thresh, min_runlength))
+  ind_sig <- as.logical(filter_runlengths(p_vec <= p_thresh, min_runlength))
 
-  s_change <- x$auc[ind][ind_sig][1]
-  t_change <- x$t[ind][ind_sig][1]
+  if (!use_com) {
+    # # AUC value at change
+    s_change <- x$auc[ind][ind_sig][1]
+    # Time at change
+    t_change <- x$t[ind][ind_sig][1]
+  } else {
+    # AUC value at change
+    s <- x$auc[ind][ind_sig][1:min_runlength]
+    # Time at change
+    t <- x$t[ind][ind_sig][1:min_runlength]
+    t_change <- sum(s*t)/sum(s)
+    s_change <- s[1]
+  }
 
   if (is.na(t_change)) {
     resp = "none"
@@ -386,7 +401,9 @@ merge_t_change <- function(df_t1, # auc detections epoch 1
 plot_auc_heatmap_pallidum <- function(df_auc,
                                       t_start,
                                       t_end,
+                                      pos_first = F,
                                       body_width = NULL,
+                                      fix_height = NULL,
                                       left_annotate = TRUE,
                                       id_annotate = TRUE,
                                       label_rows = TRUE,
@@ -521,7 +538,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
     list(hm = hm, t = t, t_ind = t_ind, t_max = t_max, t_max_ind = t_max_ind)
   }
 
-  fix_height =  NULL #unit(10, "mm") #
+  #fix_height =  NULL #unit(10, "mm") #
   hm_gpe_hfd_neg <- gen_heatmap(df_auc %>% filter(area_type=="gpe.hfd", resp=="<"),
                                 tag = "gpe_hfd_neg",
                                 column_names = t_names,
@@ -531,7 +548,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                 id_annotate = id_annotate,
                                 fix_height = fix_height,
                                 fix_width = body_width,
-                                flip =  T,
+                                flip = ifelse(pos_first, F, T),
                                 plot_latency = plot_latency,
                                 ignore_epoch = ignore_epoch)
   hm_gpe_hfd_pos <- gen_heatmap(df_auc %>% filter(area_type=="gpe.hfd", resp==">"),
@@ -543,7 +560,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                 id_annotate = id_annotate,
                                 fix_height = fix_height,
                                 fix_width = body_width,
-                                flip =  F,
+                                flip = ifelse(pos_first, T, F),
                                 plot_latency = plot_latency,
                                 ignore_epoch = ignore_epoch)
   hm_gpe_hfd_ns <- gen_heatmap(df_auc %>% filter(area_type=="gpe.hfd", resp=="none"),
@@ -555,7 +572,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                id_annotate = id_annotate,
                                fix_height = fix_height,
                                fix_width = body_width,
-                               flip =  F,
+                               flip = F,
                                plot_latency = plot_latency,
                                ignore_epoch = ignore_epoch)
 
@@ -568,7 +585,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                  id_annotate = id_annotate,
                                  fix_height = fix_height,
                                  fix_width = body_width,
-                                 flip =  T,
+                                 flip = ifelse(pos_first, F, T),
                                  plot_latency = plot_latency,
                                  ignore_epoch = ignore_epoch)
   hm_gpe_hfdp_pos <- gen_heatmap(df_auc %>% filter(area_type=="gpe.hfd-p", resp==">"),
@@ -580,7 +597,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                  id_annotate = id_annotate,
                                  fix_height = fix_height,
                                  fix_width = body_width,
-                                 flip =  F,
+                                 flip = ifelse(pos_first, T, F),
                                  plot_latency = plot_latency,
                                  ignore_epoch = ignore_epoch)
   hm_gpe_hfdp_ns <- gen_heatmap(df_auc %>% filter(area_type=="gpe.hfd-p", resp=="none"),
@@ -605,7 +622,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                 id_annotate = id_annotate,
                                 fix_height = fix_height,
                                 fix_width = body_width,
-                                flip =  T,
+                                flip = ifelse(pos_first, F, T),
                                 plot_latency = plot_latency,
                                 ignore_epoch = ignore_epoch)
   hm_gpe_lfd_pos <- gen_heatmap(df_auc %>% filter(area_type=="gpe.lfd", resp==">"),
@@ -617,7 +634,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                 id_annotate = id_annotate,
                                 fix_height = fix_height,
                                 fix_width = body_width,
-                                flip =  F,
+                                flip = ifelse(pos_first, T, F),
                                 plot_latency = plot_latency,
                                 ignore_epoch = ignore_epoch)
   hm_gpe_lfd_ns <- gen_heatmap(df_auc %>% filter(area_type=="gpe.lfd", resp=="none"),
@@ -642,7 +659,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                  id_annotate = id_annotate,
                                  fix_height = fix_height,
                                  fix_width = body_width,
-                                 flip =  T,
+                                 flip = ifelse(pos_first, F, T),
                                  plot_latency = plot_latency,
                                  ignore_epoch = ignore_epoch)
   hm_gpe_lfdb_pos <- gen_heatmap(df_auc %>% filter(area_type=="gpe.lfd-b", resp==">"),
@@ -654,7 +671,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                  id_annotate = id_annotate,
                                  fix_height = fix_height,
                                  fix_width = body_width,
-                                 flip =  F,
+                                 flip = ifelse(pos_first, T, F),
                                  plot_latency = plot_latency,
                                  ignore_epoch = ignore_epoch)
   hm_gpe_lfdb_ns <- gen_heatmap(df_auc %>% filter(area_type=="gpe.lfd-b", resp=="none"),
@@ -679,7 +696,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                 id_annotate = id_annotate,
                                 fix_height = fix_height,
                                 fix_width = body_width,
-                                flip =  T,
+                                flip = ifelse(pos_first, F, T),
                                 plot_latency = plot_latency,
                                 ignore_epoch = ignore_epoch)
   hm_gpi_hfd_pos <- gen_heatmap(df_auc %>% filter(area_type=="gpi.hfd", resp==">"),
@@ -691,7 +708,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                 id_annotate = id_annotate,
                                 fix_height = fix_height,
                                 fix_width = body_width,
-                                flip =  F,
+                                flip = ifelse(pos_first, T, F),
                                 plot_latency = plot_latency,
                                 ignore_epoch = ignore_epoch)
   hm_gpi_hfd_ns <- gen_heatmap(df_auc %>% filter(area_type=="gpi.hfd", resp=="none"),
@@ -707,15 +724,27 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                plot_latency = plot_latency,
                                ignore_epoch = ignore_epoch)
 
-  hm_list = hm_gpe_hfd_neg[[1]] %v% hm_gpe_hfd_pos[[1]] %v% hm_gpe_hfd_ns[[1]] %v%
-    hm_gpe_hfdp_neg[[1]] %v% hm_gpe_hfdp_pos[[1]] %v% hm_gpe_hfdp_ns[[1]] %v%
-    hm_gpe_lfd_neg[[1]] %v% hm_gpe_lfd_pos[[1]] %v% hm_gpe_lfd_ns[[1]] %v%
-    hm_gpe_lfdb_neg[[1]] %v% hm_gpe_lfdb_pos[[1]] %v% hm_gpe_lfdb_ns[[1]] %v%
-    hm_gpi_hfd_neg[[1]] %v% hm_gpi_hfd_pos[[1]] %v% hm_gpi_hfd_ns[[1]]
+  if (pos_first) {
+    hm_list = hm_gpe_hfd_pos[[1]] %v% hm_gpe_hfd_neg[[1]] %v% hm_gpe_hfd_ns[[1]] %v%
+      hm_gpe_hfdp_pos[[1]] %v% hm_gpe_hfdp_neg[[1]] %v% hm_gpe_hfdp_ns[[1]] %v%
+      hm_gpe_lfd_pos[[1]] %v% hm_gpe_lfd_neg[[1]] %v% hm_gpe_lfd_ns[[1]] %v%
+      hm_gpe_lfdb_pos[[1]] %v% hm_gpe_lfdb_neg[[1]] %v% hm_gpe_lfdb_ns[[1]] %v%
+      hm_gpi_hfd_pos[[1]] %v% hm_gpi_hfd_neg[[1]] %v% hm_gpi_hfd_ns[[1]]
+  } else {
+    hm_list = hm_gpe_hfd_neg[[1]] %v% hm_gpe_hfd_pos[[1]] %v% hm_gpe_hfd_ns[[1]] %v%
+      hm_gpe_hfdp_neg[[1]] %v% hm_gpe_hfdp_pos[[1]] %v% hm_gpe_hfdp_ns[[1]] %v%
+      hm_gpe_lfd_neg[[1]] %v% hm_gpe_lfd_pos[[1]] %v% hm_gpe_lfd_ns[[1]] %v%
+      hm_gpe_lfdb_neg[[1]] %v% hm_gpe_lfdb_pos[[1]] %v% hm_gpe_lfdb_ns[[1]] %v%
+      hm_gpi_hfd_neg[[1]] %v% hm_gpi_hfd_pos[[1]] %v% hm_gpi_hfd_ns[[1]]
+  }
 
   intra_gap = 0.25
   inter_gap = 2
-  gaps = c(rep(intra_gap,2), inter_gap, rep(intra_gap,2), inter_gap, rep(intra_gap,2), inter_gap, rep(intra_gap,2), inter_gap, rep(intra_gap,2))
+  gaps = c(rep(intra_gap,2), inter_gap,
+           rep(intra_gap,2), inter_gap,
+           rep(intra_gap,2), inter_gap,
+           rep(intra_gap,2), inter_gap,
+           rep(intra_gap,2))
   gaps = unit(gaps, "mm")
 
   if (left_annotate) {
