@@ -225,7 +225,7 @@ drop_neurons <- function(x, group_info, min_trial = 50) {
 }
 
 #' @export
-spks_in_window <- function(obj,
+count_spks_in_window <- function(obj,
                            align = "cue_onset_time", # must exist in obj$trial_data
                            t_start = -0.5,
                            t_end = 0,
@@ -245,9 +245,41 @@ spks_in_window <- function(obj,
     mutate(times = purrr::map2(times, shift, ~.x - .y)) %>%
     ungroup() %>%
     select(-shift) %>%
+    filter(m$mask > 0)
+
+  # Count spikes in windows
+  breaks = seq(t_start, t_end, by = binwidth)
+  mids = breaks[-length(breaks)] + diff(breaks)/2
+  c <- t %>%
+    mutate(t = list(mids)) %>%
+    mutate(n =  bin_times(times, breaks)) %>%
+    select(-times) #%>%
+    #unnest(cols = c(t, n))
+}
+
+#' @export
+spks_in_window <- function(obj,
+                           align = "cue_onset_time", # must exist in obj$trial_data
+                           t_start = -0.5,
+                           t_end = 0,
+                           binwidth = t_end - t_start, # Not actually implemented!
+                           mask_by_quality = TRUE
+) {
+  # Pivot spike quality
+  m <- obj$spike_mask %>% unnest_spike_mask()
+
+  # Long format spike times
+  t_long <- obj$spike_times %>%
+    bind_cols(shift = obj[["trial_data"]][[align]]) %>%
+    unnest_spike_times()
+
+  # Align spike times to event
+  t <- t_long %>%
+    mutate(times = purrr::map2(times, shift, ~.x - .y)) %>%
+    ungroup() %>%
+    select(-shift) %>%
     filter(m$mask > 0) %>%
     mutate(times2 = in_window(times, t_start, t_end)) # Drop spikes outside of window
-
 
   # Create unique label for neurons
   t %<>%
