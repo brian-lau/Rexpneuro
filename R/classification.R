@@ -1,11 +1,11 @@
 #' @export
 classify_dirXgng <- function(datafile,
-                                align = "cue_onset_time", # must exist in obj$trial_data
-                                t_start = -0.5,
-                                t_end = 0,
-                                binwidth = t_end - t_start)
+                             align = "cue_onset_time", # must exist in obj$trial_data
+                             t_start = -0.5,
+                             t_end = 0,
+                             min_n = 10,
+                             binwidth = t_end - t_start)
 {
-  min_n = 10
   load(datafile)
   obj %<>% drop_abort_trials()
   obj %<>% drop_incorrect_trials()
@@ -18,7 +18,11 @@ classify_dirXgng <- function(datafile,
   events <- shift_events(obj, align = align)
 
   # Bin data
-  spks <- count_spks_in_window(obj, align = align, t_start = t_start, t_end = t_end, binwidth = binwidth, mask_by_quality = TRUE)
+  # Should allow multiple aligns with different t_starts and ends
+  # add variable epoch
+  spks <- count_spks_in_window(obj, align = align, t_start = t_start, t_end = t_end,
+                               binwidth = binwidth, mask_by_quality = TRUE)
+  # Bind in some useful information
   spks2 <- spks %>%
     left_join(neuron_info %>% select(id, session, name, uname, area, type)) %>%
     left_join(events %>% select(id, session, counter_total_trials, direction, gng, condition)) %>%
@@ -31,8 +35,9 @@ classify_dirXgng <- function(datafile,
     select(-condition, -counter_total_trials)
 
   spks3 <- spks2 %>%
-    unnest(cols = c(t,spk_count))# %>%
+    unnest(cols = c(t,spk_count))
 
+  # Move this to loop below
   # Restrict to type
   spks4 <- spks3 %>%
     filter(area_type == "gpe.lfd") %>%
@@ -46,7 +51,8 @@ classify_dirXgng <- function(datafile,
     group_by(uname) %>%
     slice_head(n=1) %>%
     mutate(n = ipsi.nogo + contra.nogo + ipsi.go + contra.go) %>%
-    mutate(good = (ipsi.nogo >= min_n) + (contra.nogo >= min_n) + (ipsi.go >= min_n) + (contra.go >= min_n)) %>%
+    mutate(good = (ipsi.nogo >= min_n) + (contra.nogo >= min_n) +
+             (ipsi.go >= min_n) + (contra.go >= min_n)) %>%
     arrange(n)
 
   keep_names <- df_count %>% filter(good == 4) %>% pull(uname)
@@ -56,7 +62,7 @@ classify_dirXgng <- function(datafile,
 
   tvec <- unique(spks4$t)
 
-  res2 = list()
+  res = list()
   for (i in 1:length(tvec)) {
     spks5 <- spks4 %>%
       filter(t == tvec[i]) %>%
@@ -74,13 +80,14 @@ classify_dirXgng <- function(datafile,
 
     #set.seed(1234)
     #repeats = 1
-    #browser()
     ncv_splits = nested_cv(dat, outside = vfold_cv(v = 5, strata = "cond"),
                            inside = vfold_cv(v = 5, strata = "cond"))
 
     tic()
-    res2[[i]] = ncv_fit(ncv_splits, model = "rf")
+    res[[i]] = ncv_fit(ncv_splits, model = "rf")
     toc()
+
+    # Predict at all other times
   }
   return(res)
 
@@ -97,7 +104,6 @@ ncv_fit <- function(ncv_splits, model = "rf", ...) {
 
 #' @export
 tune_mod_multiclass <- function(ncv_split, model = "rf", grid_size = 10, verbose = F) {
-  #library(recipeselectors)
   metrics <- metric_set(roc_auc, accuracy)
   best_metric <- "roc_auc"
 
@@ -111,8 +117,8 @@ tune_mod_multiclass <- function(ncv_split, model = "rf", grid_size = 10, verbose
 
   ## Setup and tune model
   recette <- recipe(cond ~ ., data = df_train) #%>%
-    #step_nzv(all_predictors()) %>%
-    #step_normalize(all_predictors())
+  #step_nzv(all_predictors()) %>%
+  #step_normalize(all_predictors())
 
   if (model == "glm") {
     mod <- multinom_reg(
