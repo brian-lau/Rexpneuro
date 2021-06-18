@@ -630,7 +630,7 @@ plot_psth <- function(psth_obj, rname, save = FALSE, append_str = '', ...) {
   #mutate(trial = fct_reorder(fct_reorder(as_factor(counter_total_trials), target_onset_time, sum, .desc = T), as.numeric(block)))
   #mutate(trial = fct_reorder(as_factor(counter_total_trials), target_onset_time))
 
-  df2 <- df %>% group_by(counter_total_trials) %>% slice(1)
+  df2 <- df %>% group_by(counter_total_trials) %>% dplyr::slice(1)
 
   ps <- .4
 

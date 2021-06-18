@@ -3,7 +3,8 @@ classify_dirXgng <- function(datafile,
                              align = "cue_onset_time", # must exist in obj$trial_data
                              t_start = -0.5,
                              t_end = 0,
-                             min_n = 10,
+                             min_trials = 10,
+                             group = "gpe.lfd",
                              binwidth = t_end - t_start)
 {
   load(datafile)
@@ -22,6 +23,7 @@ classify_dirXgng <- function(datafile,
   # add variable epoch
   spks <- count_spks_in_window(obj, align = align, t_start = t_start, t_end = t_end,
                                binwidth = binwidth, mask_by_quality = TRUE)
+
   # Bind in some useful information
   spks2 <- spks %>%
     left_join(neuron_info %>% select(id, session, name, uname, area, type)) %>%
@@ -40,7 +42,7 @@ classify_dirXgng <- function(datafile,
   # Move this to loop below
   # Restrict to type
   spks4 <- spks3 %>%
-    filter(area_type == "gpe.lfd") %>%
+    filter(area_type == group) %>%
     select(-area_type)
 
   df_count <- spks4 %>%
@@ -51,8 +53,8 @@ classify_dirXgng <- function(datafile,
     group_by(uname) %>%
     slice_head(n=1) %>%
     mutate(n = ipsi.nogo + contra.nogo + ipsi.go + contra.go) %>%
-    mutate(good = (ipsi.nogo >= min_n) + (contra.nogo >= min_n) +
-             (ipsi.go >= min_n) + (contra.go >= min_n)) %>%
+    mutate(good = (ipsi.nogo >= min_trials) + (contra.nogo >= min_trials) +
+             (ipsi.go >= min_trials) + (contra.go >= min_trials)) %>%
     arrange(n)
 
   keep_names <- df_count %>% filter(good == 4) %>% pull(uname)
@@ -69,7 +71,7 @@ classify_dirXgng <- function(datafile,
       select(-t)
 
     # Resample trials to be the same
-    spks_pseudo <- spks5 %>% group_by(uname, cond) %>% slice_sample(n = min_n, replace = F) %>% ungroup
+    spks_pseudo <- spks5 %>% group_by(uname, cond) %>% slice_sample(n = min_trials, replace = F) %>% ungroup
 
     dat <- spks_pseudo %>%
       group_by(uname, cond) %>%
@@ -96,6 +98,7 @@ classify_dirXgng <- function(datafile,
 #' @export
 ncv_fit <- function(ncv_splits, model = "rf", ...) {
   res = list()
+  # Run in parallel
   for (i in 1:nrow(ncv_splits)) {
     res[[i]] <- tune_mod_multiclass(ncv_splits[i,], model = model, ...)
   }
