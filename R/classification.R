@@ -4,7 +4,9 @@ classify_dirXgng <- function(datafile,
                              t_start = -0.5,
                              t_end = 0,
                              min_n = 10,
-                             binwidth = t_end - t_start)
+                             binwidth = t_end - t_start,
+                             group = "gpe.lfd",
+                             model = "rf")
 {
   load(datafile)
   obj %<>% drop_abort_trials()
@@ -40,7 +42,7 @@ classify_dirXgng <- function(datafile,
   # Move this to loop below
   # Restrict to type
   spks4 <- spks3 %>%
-    filter(area_type == "gpe.lfd") %>%
+    filter(area_type == group) %>%
     select(-area_type)
 
   df_count <- spks4 %>%
@@ -84,7 +86,7 @@ classify_dirXgng <- function(datafile,
                            inside = vfold_cv(v = 5, strata = "cond"))
 
     tic()
-    res[[i]] = ncv_fit(ncv_splits, model = "rf")
+    res[[i]] = ncv_fit(ncv_splits, model = model)
     toc()
 
     # Predict at all other times
