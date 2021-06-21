@@ -25,10 +25,6 @@ batch_auc <- function(datafile = "~/ownCloud/ForFarah/pallidum_GNG.Rdata",
   neuron_info <- obj$info %>%
     unnest(cols = neuron_info, names_repair = 'universal')
 
-  # if (! ("area" %in% names(neuron_info))) {
-  #   neuron_info %<>% mutate(area = "target", .after = "target")
-  # }
-
   # Align spikes and behavioral markers to requested event
   events <- shift_events(obj, align = align)
 
