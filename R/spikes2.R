@@ -142,3 +142,69 @@ read_matched_spike_data <- function(obj,
 
   return(obj)
 }
+
+#' @export
+restrict_neurons <- function(obj,
+                             good # data frame must include id, fname_ephys, fname_eventide, name, good
+) {
+  # restrict_fname = paste0(basedir, "STN_good_neuron_list.csv")
+  # good = as_tibble(read.csv(restrict_fname, header = T))
+  # good %<>% filter(good == "all")
+  neuron_info <- obj$info %>%
+    unnest(cols = neuron_info, names_repair = 'universal')
+
+  good_info <- neuron_info %>% semi_join(good, by = c("id", "fname_ephys", "fname_eventide", "name"))
+  bad_info <- neuron_info %>% anti_join(good, by = c("id", "fname_ephys", "fname_eventide", "name"))
+
+  # un-nest
+  spike_times <- obj$spike_times %>% unnest_spike_times()
+  # filtering join
+  spike_times %<>% semi_join(good_info, by = c("id", "session", "name"))
+
+  # re-nest, this is clearly not efficient...
+  pivot_nest <- function(x, y) {
+    x %>% pivot_wider(names_from = name, values_from = times) %>% nest(neurons = everything())
+  }
+  tic()
+  spike_times %<>% group_by(id, session, counter_total_trials) %>%
+    group_modify(.f = ~pivot_nest(.x))
+  toc()
+
+  #   # re-nest
+  # spike_times %<>% group_by(id, session, counter_total_trials) %>%
+  #   nest() %>%
+  #   rename(neurons = data)
+
+  spike_mask <- obj$spike_mask %>% unnest_spike_mask()
+  spike_mask %<>% semi_join(good_info, by = c("id", "session", "name"))
+  # spike_mask %<>% group_by(id, session, counter_total_trials) %>%
+  #   nest() %>%
+  #   rename(neurons = data)
+  pivot_nest2 <- function(x, y) {
+    x %>% pivot_wider(names_from = name, values_from = mask) %>% nest(neurons = everything())
+  }
+  tic()
+  spike_mask %<>% group_by(id, session, counter_total_trials) %>%
+    group_modify(.f = ~pivot_nest2(.x))
+  toc()
+
+
+  # spike_times %>% group_by(id, session, counter_total_trials) %>%
+  #   pivot_wider(names_from = name, values_from = times) %>%
+  #   nest(neurons = starts_with("AD"))
+
+  good_info %<>% nest( data = c(name, channel, channelName, unit, tStart,
+                                tEnd, gap)) %>%
+    rename(neuron_info = data)
+
+  obj$info <- good_info
+  obj$trial_data %<>% semi_join(good_info, by = c("id", "session"))
+  if (nrow(obj$tracker_data) != 0) {
+    obj$tracker_data %>% semi_join(good_info, by = c("id", "session"))
+  }
+  obj$spike_times <- spike_times
+  obj$spike_mask <- spike_mask
+  obj$trial_duration %<>% semi_join(good_info, by = c("id", "session"))
+
+  return(obj)
+}
