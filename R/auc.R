@@ -48,10 +48,14 @@ batch_auc <- function(datafile = "~/ownCloud/ForFarah/pallidum_GNG.Rdata",
     group_by(across(all_of(c("uname",split_factor)))) %>%
     count() %>%
     pivot_wider(names_from = split_factor, values_from = n, names_prefix = "n_")
+browser()
 
   tic()
   df_psth %<>%
     # drop some columns to save memory?
+    select(id, session, counter_total_trials, uname,
+           psth, block, condition, gng,
+           ends_with("_onset_time"), starts_with("n_")) %>%
     left_join(n_trials, by = "uname") %>%
     mutate(t = list(psth_obj$t)) %>%
     unnest(cols = c(psth, t))
@@ -86,6 +90,7 @@ batch_auc <- function(datafile = "~/ownCloud/ForFarah/pallidum_GNG.Rdata",
         mutate(psth = ifelse(t >= .data[[drop_after_event]], NA, psth))
     }
   }
+
 
   tic()
   if (bootstrap_auc) {
