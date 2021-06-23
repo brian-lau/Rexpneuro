@@ -403,6 +403,102 @@ merge_t_change <- function(df_t1, # auc detections epoch 1
 }
 
 #' @export
+single_auc_heatmap <- function(df,
+                        colormap,
+                        tag,
+                        flip = F,
+                        column_names = NULL,
+                        label_rows = F,
+                        ann_col = NULL,
+                        id_annotate = F,
+                        fix_height = NULL,
+                        fix_width = NULL,
+                        plot_latency = TRUE,
+                        ignore_epoch = NULL
+) {
+  if (nrow(df)==0) {
+    return(NULL)
+  }
+  M <- do.call(rbind, df  %>% pull(auc))
+  t <- df %>% pull(t_change)
+  if ("t_max" %in% names(df)) {
+    if (!all(is.na(df %>% pull(t_max)))) {
+      t_max <- df %>% pull(t_max)
+    }
+  }
+  if (label_rows) {
+    rownames(M) <- df %>% pull(uname)
+  }
+  if (!is.null(column_names)) {
+    colnames(M) <- column_names
+  }
+
+  t_vec <- df[1,]$t[[1]]
+  if (!all(is.na(t))) {
+    t_ind <- t %>% map_int(~which(abs(t_vec-.x)==min(abs(t_vec-.x))))
+    if (exists("t_max")) {
+      t_max_ind <- t_max %>% map_int(~which(abs(t_vec-.x)==min(abs(t_vec-.x))))
+    }
+  } else {
+    t_ind <- t
+  }
+
+  epoch <- df$epoch
+  if (flip) {
+    M <- apply(M, 2, rev)
+    t <- rev(t)
+    t_ind <- rev(t_ind)
+    if (exists("t_max")) {
+      t_max <- rev(t_max)
+      t_max_ind <- rev(t_max_ind)
+    }
+    epoch <- rev(epoch)
+  }
+
+  if (!is.null(ann_col)) {
+    # row_ha = rowAnnotation(AreaType = df %>% pull(area_type), show_annotation_name = F,
+    #                        col = ann_col, show_legend = F,
+    #                        simple_anno_size = unit(4, "mm"))
+    if (id_annotate) {
+      row_ha = rowAnnotation(AreaType = df %>% pull(area_type), Id = df %>% pull(id),
+                             show_annotation_name = F, col = ann_col, show_legend = F,
+                             simple_anno_size = unit(3, "mm"))
+    } else {
+      row_ha = rowAnnotation(AreaType = df %>% pull(area_type),
+                             show_annotation_name = F, col = ann_col, show_legend = F,
+                             simple_anno_size = unit(3, "mm"))
+    }
+  } else {
+    row_ha = NULL
+  }
+
+  hm = Heatmap(M, name = tag, cluster_rows = F, cluster_columns = F,
+               col = colormap, left_annotation = row_ha,
+               height = fix_height,
+               width = fix_width,
+               show_heatmap_legend = F,
+               row_names_gp = gpar(fontsize = 3),
+               column_names_gp = gpar(fontsize = 6),
+               column_names_rot = 0,
+               column_names_centered = T)
+
+  if (plot_latency) {
+    if (!is.null(ignore_epoch)) {
+      t[epoch == ignore_epoch] = NA
+      t_ind[epoch == ignore_epoch] = NA
+    }
+  } else {
+    t <- t*NA
+    t_ind <- t_ind*NA
+  }
+  if (!exists("t_max")) {
+    t_max = rep(NA,length(t))
+    t_max_ind = t_max
+  }
+  list(hm = hm, t = t, t_ind = t_ind, t_max = t_max, t_max_ind = t_max_ind)
+}
+
+#' @export
 plot_auc_heatmap_pallidum <- function(df_auc,
                                       t_start,
                                       t_end,
@@ -448,103 +544,9 @@ plot_auc_heatmap_pallidum <- function(df_auc,
   t_names <- as.character(t_names)
   t_names[is.na(t_names)] <- ""
 
-  gen_heatmap <- function(df,
-                          colormap,
-                          tag,
-                          flip = F,
-                          column_names = NULL,
-                          label_rows = F,
-                          ann_col = NULL,
-                          id_annotate = F,
-                          fix_height = NULL,
-                          fix_width = NULL,
-                          plot_latency = TRUE,
-                          ignore_epoch = NULL
-  ) {
-    if (nrow(df)==0) {
-      return(NULL)
-    }
-    M <- do.call(rbind, df  %>% pull(auc))
-    t <- df %>% pull(t_change)
-    if ("t_max" %in% names(df)) {
-      if (!all(is.na(df %>% pull(t_max)))) {
-        t_max <- df %>% pull(t_max)
-      }
-    }
-    if (label_rows) {
-      rownames(M) <- df %>% pull(uname)
-    }
-    if (!is.null(column_names)) {
-      colnames(M) <- column_names
-    }
-
-    t_vec <- df[1,]$t[[1]]
-    if (!all(is.na(t))) {
-      t_ind <- t %>% map_int(~which(abs(t_vec-.x)==min(abs(t_vec-.x))))
-      if (exists("t_max")) {
-        t_max_ind <- t_max %>% map_int(~which(abs(t_vec-.x)==min(abs(t_vec-.x))))
-      }
-    } else {
-      t_ind <- t
-    }
-
-    epoch <- df$epoch
-    if (flip) {
-      M <- apply(M, 2, rev)
-      t <- rev(t)
-      t_ind <- rev(t_ind)
-      if (exists("t_max")) {
-        t_max <- rev(t_max)
-        t_max_ind <- rev(t_max_ind)
-      }
-      epoch <- rev(epoch)
-    }
-
-    if (!is.null(ann_col)) {
-      # row_ha = rowAnnotation(AreaType = df %>% pull(area_type), show_annotation_name = F,
-      #                        col = ann_col, show_legend = F,
-      #                        simple_anno_size = unit(4, "mm"))
-      if (id_annotate) {
-        row_ha = rowAnnotation(AreaType = df %>% pull(area_type), Id = df %>% pull(id),
-                               show_annotation_name = F, col = ann_col, show_legend = F,
-                               simple_anno_size = unit(3, "mm"))
-      } else {
-        row_ha = rowAnnotation(AreaType = df %>% pull(area_type),
-                               show_annotation_name = F, col = ann_col, show_legend = F,
-                               simple_anno_size = unit(3, "mm"))
-      }
-    } else {
-      row_ha = NULL
-    }
-
-    hm = Heatmap(M, name = tag, cluster_rows = F, cluster_columns = F,
-                 col = colormap, left_annotation = row_ha,
-                 height = fix_height,
-                 width = fix_width,
-                 show_heatmap_legend = F,
-                 row_names_gp = gpar(fontsize = 3),
-                 column_names_gp = gpar(fontsize = 6),
-                 column_names_rot = 0,
-                 column_names_centered = T)
-
-    if (plot_latency) {
-      if (!is.null(ignore_epoch)) {
-        t[epoch == ignore_epoch] = NA
-        t_ind[epoch == ignore_epoch] = NA
-      }
-    } else {
-      t <- t*NA
-      t_ind <- t_ind*NA
-    }
-    if (!exists("t_max")) {
-      t_max = rep(NA,length(t))
-      t_max_ind = t_max
-    }
-    list(hm = hm, t = t, t_ind = t_ind, t_max = t_max, t_max_ind = t_max_ind)
-  }
 
   #fix_height =  NULL #unit(10, "mm") #
-  hm_gpe_hfd_neg <- gen_heatmap(df_auc %>% filter(area_type=="gpe.hfd", resp=="<"),
+  hm_gpe_hfd_neg <- single_auc_heatmap(df_auc %>% filter(area_type=="gpe.hfd", resp=="<"),
                                 tag = "gpe_hfd_neg",
                                 column_names = t_names,
                                 label_rows = label_rows,
@@ -556,7 +558,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                 flip = ifelse(pos_first, F, T),
                                 plot_latency = plot_latency,
                                 ignore_epoch = ignore_epoch)
-  hm_gpe_hfd_pos <- gen_heatmap(df_auc %>% filter(area_type=="gpe.hfd", resp==">"),
+  hm_gpe_hfd_pos <- single_auc_heatmap(df_auc %>% filter(area_type=="gpe.hfd", resp==">"),
                                 tag = "gpe_hfd_pos",
                                 column_names = t_names,
                                 label_rows = label_rows,
@@ -568,7 +570,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                 flip = ifelse(pos_first, T, F),
                                 plot_latency = plot_latency,
                                 ignore_epoch = ignore_epoch)
-  hm_gpe_hfd_ns <- gen_heatmap(df_auc %>% filter(area_type=="gpe.hfd", resp=="none"),
+  hm_gpe_hfd_ns <- single_auc_heatmap(df_auc %>% filter(area_type=="gpe.hfd", resp=="none"),
                                tag = "gpe_hfd_ns",
                                column_names = t_names,
                                label_rows = label_rows,
@@ -581,7 +583,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                plot_latency = plot_latency,
                                ignore_epoch = ignore_epoch)
 
-  hm_gpe_hfdp_neg <- gen_heatmap(df_auc %>% filter(area_type=="gpe.hfd-p", resp=="<"),
+  hm_gpe_hfdp_neg <- single_auc_heatmap(df_auc %>% filter(area_type=="gpe.hfd-p", resp=="<"),
                                  tag = "gpe_hfdp_neg",
                                  column_names = t_names,
                                  label_rows = label_rows,
@@ -593,7 +595,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                  flip = ifelse(pos_first, F, T),
                                  plot_latency = plot_latency,
                                  ignore_epoch = ignore_epoch)
-  hm_gpe_hfdp_pos <- gen_heatmap(df_auc %>% filter(area_type=="gpe.hfd-p", resp==">"),
+  hm_gpe_hfdp_pos <- single_auc_heatmap(df_auc %>% filter(area_type=="gpe.hfd-p", resp==">"),
                                  tag = "gpe_hfdp_pos",
                                  column_names = t_names,
                                  label_rows = label_rows,
@@ -605,7 +607,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                  flip = ifelse(pos_first, T, F),
                                  plot_latency = plot_latency,
                                  ignore_epoch = ignore_epoch)
-  hm_gpe_hfdp_ns <- gen_heatmap(df_auc %>% filter(area_type=="gpe.hfd-p", resp=="none"),
+  hm_gpe_hfdp_ns <- single_auc_heatmap(df_auc %>% filter(area_type=="gpe.hfd-p", resp=="none"),
                                 tag = "gpe_hfdp_ns",
                                 column_names = t_names,
                                 label_rows = label_rows,
@@ -618,7 +620,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                 plot_latency = plot_latency,
                                 ignore_epoch = ignore_epoch)
 
-  hm_gpe_lfd_neg <- gen_heatmap(df_auc %>% filter(area_type=="gpe.lfd", resp=="<"),
+  hm_gpe_lfd_neg <- single_auc_heatmap(df_auc %>% filter(area_type=="gpe.lfd", resp=="<"),
                                 tag = "gpe_lfd_neg",
                                 column_names = t_names,
                                 label_rows = label_rows,
@@ -630,7 +632,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                 flip = ifelse(pos_first, F, T),
                                 plot_latency = plot_latency,
                                 ignore_epoch = ignore_epoch)
-  hm_gpe_lfd_pos <- gen_heatmap(df_auc %>% filter(area_type=="gpe.lfd", resp==">"),
+  hm_gpe_lfd_pos <- single_auc_heatmap(df_auc %>% filter(area_type=="gpe.lfd", resp==">"),
                                 tag = "gpe_lfd_pos",
                                 column_names = t_names,
                                 label_rows = label_rows,
@@ -642,7 +644,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                 flip = ifelse(pos_first, T, F),
                                 plot_latency = plot_latency,
                                 ignore_epoch = ignore_epoch)
-  hm_gpe_lfd_ns <- gen_heatmap(df_auc %>% filter(area_type=="gpe.lfd", resp=="none"),
+  hm_gpe_lfd_ns <- single_auc_heatmap(df_auc %>% filter(area_type=="gpe.lfd", resp=="none"),
                                tag = "gpe_lfd_ns",
                                column_names = t_names,
                                label_rows = label_rows,
@@ -655,7 +657,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                plot_latency = plot_latency,
                                ignore_epoch = ignore_epoch)
 
-  hm_gpe_lfdb_neg <- gen_heatmap(df_auc %>% filter(area_type=="gpe.lfd-b", resp=="<"),
+  hm_gpe_lfdb_neg <- single_auc_heatmap(df_auc %>% filter(area_type=="gpe.lfd-b", resp=="<"),
                                  tag = "gpe_lfdb_neg",
                                  column_names = t_names,
                                  label_rows = label_rows,
@@ -667,7 +669,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                  flip = ifelse(pos_first, F, T),
                                  plot_latency = plot_latency,
                                  ignore_epoch = ignore_epoch)
-  hm_gpe_lfdb_pos <- gen_heatmap(df_auc %>% filter(area_type=="gpe.lfd-b", resp==">"),
+  hm_gpe_lfdb_pos <- single_auc_heatmap(df_auc %>% filter(area_type=="gpe.lfd-b", resp==">"),
                                  tag = "gpe_lfdb_pos",
                                  column_names = t_names,
                                  label_rows = label_rows,
@@ -679,7 +681,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                  flip = ifelse(pos_first, T, F),
                                  plot_latency = plot_latency,
                                  ignore_epoch = ignore_epoch)
-  hm_gpe_lfdb_ns <- gen_heatmap(df_auc %>% filter(area_type=="gpe.lfd-b", resp=="none"),
+  hm_gpe_lfdb_ns <- single_auc_heatmap(df_auc %>% filter(area_type=="gpe.lfd-b", resp=="none"),
                                 tag = "gpe_lfdb_ns",
                                 column_names = t_names,
                                 label_rows = label_rows,
@@ -692,7 +694,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                 plot_latency = plot_latency,
                                 ignore_epoch = ignore_epoch)
 
-  hm_gpi_hfd_neg <- gen_heatmap(df_auc %>% filter(area_type=="gpi.hfd", resp=="<"),
+  hm_gpi_hfd_neg <- single_auc_heatmap(df_auc %>% filter(area_type=="gpi.hfd", resp=="<"),
                                 tag = "gpi_hfd_neg",
                                 column_names = t_names,
                                 label_rows = label_rows,
@@ -704,7 +706,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                 flip = ifelse(pos_first, F, T),
                                 plot_latency = plot_latency,
                                 ignore_epoch = ignore_epoch)
-  hm_gpi_hfd_pos <- gen_heatmap(df_auc %>% filter(area_type=="gpi.hfd", resp==">"),
+  hm_gpi_hfd_pos <- single_auc_heatmap(df_auc %>% filter(area_type=="gpi.hfd", resp==">"),
                                 tag = "gpi_hfd_pos",
                                 column_names = t_names,
                                 label_rows = label_rows,
@@ -716,7 +718,7 @@ plot_auc_heatmap_pallidum <- function(df_auc,
                                 flip = ifelse(pos_first, T, F),
                                 plot_latency = plot_latency,
                                 ignore_epoch = ignore_epoch)
-  hm_gpi_hfd_ns <- gen_heatmap(df_auc %>% filter(area_type=="gpi.hfd", resp=="none"),
+  hm_gpi_hfd_ns <- single_auc_heatmap(df_auc %>% filter(area_type=="gpi.hfd", resp=="none"),
                                tag = "gpi_hfd_ns",
                                column_names = t_names,
                                label_rows = label_rows,
@@ -771,6 +773,313 @@ plot_auc_heatmap_pallidum <- function(df_auc,
   hm_all <- ComplexHeatmap::draw(hm_list, gap = gaps, merge_legends = F, heatmap_legend_list = auc_legend, newpage = F)
 
   types = c("gpe_hfd", "gpe_hfdp", "gpe_lfd", "gpe_lfdb", "gpi_hfd")
+  resps = c("neg", "pos", "ns")
+
+  for (i in 1:length(types)) {
+    for (j in 1:length(resps)) {
+      decorate_heatmap_body(paste0(types[i], '_', resps[j]), {
+        ind = which(t_names=="0")
+        x = ind/length(t_names)
+        grid.lines(c(x, x), c(0, 1), gp = gpar(lwd = .5, lty = 1))
+      }, slice = 1)
+
+      decorate_heatmap_body(paste0(types[i], '_', resps[j]), {
+        varname <- paste0("hm_", types[i], '_', resps[j])
+        x = get(varname)[[3]]
+        x = x/length(t_names)
+        y = ((length(x)-1):0)/(length(x)) + (1/length(x))/2
+
+        grid.points(x, y, pch = 19, size = unit(0.2, "mm"), default.units = "npc")
+      }, slice = 1)
+
+      # For plotting maximum time
+      # decorate_heatmap_body(paste0(types[i], '_', resps[j]), {
+      #   varname <- paste0("hm_", types[i], '_', resps[j])
+      #   x = get(varname)[[5]]
+      #   x = x/length(t_names)
+      #   y = ((length(x)-1):0)/(length(x)) + (1/length(x))/2
+      #
+      #   grid.points(x, y, pch = 15, size = unit(0.2, "mm"), default.units = "npc")
+      # }, slice = 1)
+    }
+  }
+}
+
+#' @export
+plot_auc_heatmap_stn <- function(df_auc,
+                                      t_start,
+                                      t_end,
+                                      pos_first = F,
+                                      body_width = NULL,
+                                      fix_height = NULL,
+                                      left_annotate = TRUE,
+                                      id_annotate = TRUE,
+                                      label_rows = TRUE,
+                                      plot_latency = TRUE,
+                                      ignore_epoch = NULL
+) {
+  library(ComplexHeatmap) # BiocManager::install("ComplexHeatmap")
+  library(circlize)
+
+  cm = colormaps()
+  if (left_annotate) {
+    hm_colors <- c(cm["AreaType"], cm["Id"])
+  } else {
+    hm_colors <- NULL
+  }
+
+  # breaks = c(-.5, -.4, -.3, -.15, 0, .15, .3, .4, .5) + 0.5
+  # col_fun = circlize::colorRamp2(breaks,
+  #                                khroma::colour("BuRd")(9))
+  col_fun = circlize::colorRamp2(seq(from=0, to=1, length.out = 27),
+                                 khroma::colour("BuRd")(27))
+  # col_fun = circlize::colorRamp2(seq(from=0, to=1, length.out = 13),
+  #                                khroma::colour("sunset")(13))
+
+  df_auc %<>% tidyr::unnest(cols = c(t, n_pos, n_neg,
+                                     auc, auc_boot_median, auc_boot_mean, ci_low,
+                                     ci_hi, p_value))
+  df_auc %<>% filter((t>=t_start)&(t<=t_end)) %>%
+    tidyr::chop(cols = c(t, n_pos, n_neg,
+                         auc, auc_boot_median, auc_boot_mean, ci_low,
+                         ci_hi, p_value))
+
+  t_vec <- df_auc[1,]$t[[1]]
+  t_vec <- t_vec[(t_vec>=t_start) & (t_vec<=t_end)]
+  t_names <- round(t_vec, digits = 3)
+  t_names[!t_names %in% round(seq(-.2,.7, by = 0.1), digits = 3)] = NA
+  t_names <- as.character(t_names)
+  t_names[is.na(t_names)] <- ""
+
+
+  #fix_height =  NULL #unit(10, "mm") #
+  hm_pos_neg <- single_auc_heatmap(df_auc %>% filter(area_type=="stn.pos", resp=="<"),
+                                       tag = "pos_neg",
+                                       column_names = t_names,
+                                       label_rows = label_rows,
+                                       colormap = col_fun,
+                                       ann_col = hm_colors,
+                                       id_annotate = id_annotate,
+                                       fix_height = fix_height,
+                                       fix_width = body_width,
+                                       flip = ifelse(pos_first, F, T),
+                                       plot_latency = plot_latency,
+                                       ignore_epoch = ignore_epoch)
+  hm_pos_pos <- single_auc_heatmap(df_auc %>% filter(area_type=="stn.pos", resp==">"),
+                                       tag = "pos_pos",
+                                       column_names = t_names,
+                                       label_rows = label_rows,
+                                       colormap = col_fun,
+                                       ann_col = hm_colors,
+                                       id_annotate = id_annotate,
+                                       fix_height = fix_height,
+                                       fix_width = body_width,
+                                       flip = ifelse(pos_first, T, F),
+                                       plot_latency = plot_latency,
+                                       ignore_epoch = ignore_epoch)
+  hm_pos_ns <- single_auc_heatmap(df_auc %>% filter(area_type=="stn.pos", resp=="none"),
+                                      tag = "pos_ns",
+                                      column_names = t_names,
+                                      label_rows = label_rows,
+                                      colormap = col_fun,
+                                      ann_col = hm_colors,
+                                      id_annotate = id_annotate,
+                                      fix_height = fix_height,
+                                      fix_width = body_width,
+                                      flip = F,
+                                      plot_latency = plot_latency,
+                                      ignore_epoch = ignore_epoch)
+
+  hm_neg_neg <- single_auc_heatmap(df_auc %>% filter(area_type=="stn.neg", resp=="<"),
+                                        tag = "neg_neg",
+                                        column_names = t_names,
+                                        label_rows = label_rows,
+                                        colormap = col_fun,
+                                        ann_col = hm_colors,
+                                        id_annotate = id_annotate,
+                                        fix_height = fix_height,
+                                        fix_width = body_width,
+                                        flip = ifelse(pos_first, F, T),
+                                        plot_latency = plot_latency,
+                                        ignore_epoch = ignore_epoch)
+  hm_neg_pos <- single_auc_heatmap(df_auc %>% filter(area_type=="stn.neg", resp==">"),
+                                        tag = "neg_pos",
+                                        column_names = t_names,
+                                        label_rows = label_rows,
+                                        colormap = col_fun,
+                                        ann_col = hm_colors,
+                                        id_annotate = id_annotate,
+                                        fix_height = fix_height,
+                                        fix_width = body_width,
+                                        flip = ifelse(pos_first, T, F),
+                                        plot_latency = plot_latency,
+                                        ignore_epoch = ignore_epoch)
+  hm_neg_ns <- single_auc_heatmap(df_auc %>% filter(area_type=="stn.neg", resp=="none"),
+                                       tag = "neg_ns",
+                                       column_names = t_names,
+                                       label_rows = label_rows,
+                                       colormap = col_fun,
+                                       ann_col = hm_colors,
+                                       id_annotate = id_annotate,
+                                       fix_height = fix_height,
+                                       fix_width = body_width,
+                                       flip =  F,
+                                       plot_latency = plot_latency,
+                                       ignore_epoch = ignore_epoch)
+
+  hm_polypos_neg <- single_auc_heatmap(df_auc %>% filter(area_type=="stn.polypos", resp=="<"),
+                                       tag = "polypos_neg",
+                                       column_names = t_names,
+                                       label_rows = label_rows,
+                                       colormap = col_fun,
+                                       ann_col = hm_colors,
+                                       id_annotate = id_annotate,
+                                       fix_height = fix_height,
+                                       fix_width = body_width,
+                                       flip = ifelse(pos_first, F, T),
+                                       plot_latency = plot_latency,
+                                       ignore_epoch = ignore_epoch)
+  hm_polypos_pos <- single_auc_heatmap(df_auc %>% filter(area_type=="stn.polypos", resp==">"),
+                                       tag = "polypos_pos",
+                                       column_names = t_names,
+                                       label_rows = label_rows,
+                                       colormap = col_fun,
+                                       ann_col = hm_colors,
+                                       id_annotate = id_annotate,
+                                       fix_height = fix_height,
+                                       fix_width = body_width,
+                                       flip = ifelse(pos_first, T, F),
+                                       plot_latency = plot_latency,
+                                       ignore_epoch = ignore_epoch)
+  hm_polypos_ns <- single_auc_heatmap(df_auc %>% filter(area_type=="stn.polypos", resp=="none"),
+                                      tag = "polypos_ns",
+                                      column_names = t_names,
+                                      label_rows = label_rows,
+                                      colormap = col_fun,
+                                      ann_col = hm_colors,
+                                      id_annotate = id_annotate,
+                                      fix_height = fix_height,
+                                      fix_width = body_width,
+                                      flip =  F,
+                                      plot_latency = plot_latency,
+                                      ignore_epoch = ignore_epoch)
+
+  hm_polyneg_neg <- single_auc_heatmap(df_auc %>% filter(area_type=="stn.polyneg", resp=="<"),
+                                        tag = "polyneg_neg",
+                                        column_names = t_names,
+                                        label_rows = label_rows,
+                                        colormap = col_fun,
+                                        ann_col = hm_colors,
+                                        id_annotate = id_annotate,
+                                        fix_height = fix_height,
+                                        fix_width = body_width,
+                                        flip = ifelse(pos_first, F, T),
+                                        plot_latency = plot_latency,
+                                        ignore_epoch = ignore_epoch)
+  hm_polyneg_pos <- single_auc_heatmap(df_auc %>% filter(area_type=="stn.polyneg", resp==">"),
+                                        tag = "polyneg_pos",
+                                        column_names = t_names,
+                                        label_rows = label_rows,
+                                        colormap = col_fun,
+                                        ann_col = hm_colors,
+                                        id_annotate = id_annotate,
+                                        fix_height = fix_height,
+                                        fix_width = body_width,
+                                        flip = ifelse(pos_first, T, F),
+                                        plot_latency = plot_latency,
+                                        ignore_epoch = ignore_epoch)
+  hm_polyneg_ns <- single_auc_heatmap(df_auc %>% filter(area_type=="stn.polyneg", resp=="none"),
+                                       tag = "polyneg_ns",
+                                       column_names = t_names,
+                                       label_rows = label_rows,
+                                       colormap = col_fun,
+                                       ann_col = hm_colors,
+                                       id_annotate = id_annotate,
+                                       fix_height = fix_height,
+                                       fix_width = body_width,
+                                       flip =  F,
+                                       plot_latency = plot_latency,
+                                       ignore_epoch = ignore_epoch)
+
+  hm_null_neg <- single_auc_heatmap(df_auc %>% filter(area_type=="stn.NULL", resp=="<"),
+                                       tag = "null_neg",
+                                       column_names = t_names,
+                                       label_rows = label_rows,
+                                       colormap = col_fun,
+                                       ann_col = hm_colors,
+                                       id_annotate = id_annotate,
+                                       fix_height = fix_height,
+                                       fix_width = body_width,
+                                       flip = ifelse(pos_first, F, T),
+                                       plot_latency = plot_latency,
+                                       ignore_epoch = ignore_epoch)
+  hm_null_pos <- single_auc_heatmap(df_auc %>% filter(area_type=="stn.NULL", resp==">"),
+                                       tag = "null_pos",
+                                       column_names = t_names,
+                                       label_rows = label_rows,
+                                       colormap = col_fun,
+                                       ann_col = hm_colors,
+                                       id_annotate = id_annotate,
+                                       fix_height = fix_height,
+                                       fix_width = body_width,
+                                       flip = ifelse(pos_first, T, F),
+                                       plot_latency = plot_latency,
+                                       ignore_epoch = ignore_epoch)
+  hm_null_ns <- single_auc_heatmap(df_auc %>% filter(area_type=="stn.NULL", resp=="none"),
+                                      tag = "null_ns",
+                                      column_names = t_names,
+                                      label_rows = label_rows,
+                                      colormap = col_fun,
+                                      ann_col = hm_colors,
+                                      id_annotate = id_annotate,
+                                      fix_height = fix_height,
+                                      fix_width = body_width,
+                                      flip =  F,
+                                      plot_latency = plot_latency,
+                                      ignore_epoch = ignore_epoch)
+
+  if (pos_first) {
+    hm_list = hm_pos_pos[[1]] %v% hm_pos_neg[[1]] %v% hm_pos_ns[[1]] %v%
+      hm_neg_pos[[1]] %v% hm_neg_neg[[1]] %v% hm_neg_ns[[1]] %v%
+      hm_polypos_pos[[1]] %v% hm_polypos_neg[[1]] %v% hm_polypos_ns[[1]] %v%
+      hm_polyneg_pos[[1]] %v% hm_polyneg_neg[[1]] %v% hm_polyneg_ns[[1]] %v%
+      hm_null_pos[[1]] %v% hm_null_neg[[1]] %v% hm_null_ns[[1]]
+  } else {
+    hm_list = hm_pos_neg[[1]] %v% hm_pos_pos[[1]] %v% hm_pos_ns[[1]] %v%
+      hm_neg_neg[[1]] %v% hm_neg_pos[[1]] %v% hm_neg_ns[[1]] %v%
+      hm_polypos_neg[[1]] %v% hm_polypos_pos[[1]] %v% hm_polypos_ns[[1]] %v%
+      hm_polyneg_neg[[1]] %v% hm_polyneg_pos[[1]] %v% hm_polyneg_ns[[1]] %v%
+      hm_null_neg[[1]] %v% hm_null_pos[[1]] %v% hm_null_ns[[1]]
+  }
+
+  intra_gap = 0.25
+  inter_gap = 2
+  gaps = c(rep(intra_gap,2), inter_gap,
+           rep(intra_gap,2), inter_gap,
+           rep(intra_gap,2), inter_gap,
+           rep(intra_gap,2), inter_gap,
+           rep(intra_gap,2))
+  gaps = unit(gaps, "mm")
+
+  if (left_annotate) {
+    type_legend <- Legend(labels = names(hm_colors$AreaType),
+                          title = "Type", legend_gp = gpar(fill = hm_colors$AreaType))
+
+    if (id_annotate) {
+      id_legend <- Legend(labels = names(hm_colors$Id),
+                          title = "Id", legend_gp = gpar(fill = hm_colors$Id))
+      auc_legend <- list(type_legend, id_legend, Legend(col_fun = col_fun, title = "AUC"))
+    } else {
+      auc_legend <- list(type_legend, Legend(col_fun = col_fun, title = "AUC"))
+    }
+
+  } else {
+    auc_legend <- list()
+  }
+
+  hm_all <- ComplexHeatmap::draw(hm_list, gap = gaps, merge_legends = F, heatmap_legend_list = auc_legend, newpage = F)
+
+  types = c("pos", "neg", "polypos", "polyneg", "null")
   resps = c("neg", "pos", "ns")
 
   for (i in 1:length(types)) {

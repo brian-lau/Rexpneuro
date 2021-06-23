@@ -3,15 +3,21 @@ colormaps <- function(paper = "pallidum") {
 
   if (paper == "pallidum") {
     type <- c("hfd" = "#1B9E77",
-                          "hfd-p" = "#D95F02",
-                          "lfd" = "#7570B3",
-                          "lfd-b" = "#E7298A")
+              "hfd-p" = "#D95F02",
+              "lfd" = "#7570B3",
+              "lfd-b" = "#E7298A")
 
     area_type <- c("gpe.hfd" = "#1B9E77",
-                               "gpe.hfd-p" = "#D95F02",
-                               "gpe.lfd" = "#7570B3",
-                               "gpe.lfd-b" = "#E7298A",
-                               "gpi.hfd" = "#555555")
+                   "gpe.hfd-p" = "#D95F02",
+                   "gpe.lfd" = "#7570B3",
+                   "gpe.lfd-b" = "#E7298A",
+                   "gpi.hfd" = "#555555",
+                   "stn.pos" = "#1B9E77",
+                   "stn.neg" = "#D95F02",
+                   "stn.polypos" = "#7570B3",
+                   "stn.polypos" = "#E7298A",
+                   "stn.NULL" = "#555555"
+    )
 
     id <- c("flocky" = "red", "tess" = "black")
 
