@@ -15,11 +15,11 @@ colormaps <- function(paper = "pallidum") {
                    "stn.pos" = "#1B9E77",
                    "stn.neg" = "#D95F02",
                    "stn.polypos" = "#7570B3",
-                   "stn.polypos" = "#E7298A",
+                   "stn.polyneg" = "#E7298A",
                    "stn.NULL" = "#555555"
     )
 
-    id <- c("flocky" = "red", "tess" = "black")
+    id <- c("flocky" = "red", "tess" = "black", "chanel" = "pink")
 
     condition <- c("go_con" = "#228833", "go" = "#4477AA", "nogo" = "#EE6677")
   } else {
