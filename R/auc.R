@@ -57,7 +57,7 @@ batch_auc <- function(datafile = "~/ownCloud/ForFarah/pallidum_GNG.Rdata",
   df_psth %<>%
     # drop some columns to save memory?
     select(id, session, counter_total_trials, uname,
-           psth, block, condition, gng,
+           psth, block, condition, gng, direction,
            ends_with("_onset_time"), starts_with("n_")) %>%
     left_join(n_trials, by = "uname") %>%
     mutate(t = list(psth_obj$t)) %>%
