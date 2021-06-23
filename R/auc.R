@@ -25,6 +25,10 @@ batch_auc <- function(datafile = "~/ownCloud/ForFarah/pallidum_GNG.Rdata",
   neuron_info <- obj$info %>%
     unnest(cols = neuron_info, names_repair = 'universal')
 
+  if (!"rel_depth" %in% names(neuron_info)) {
+    neuron_info %<>% mutate(rel_depth = NA)
+  }
+
   # Align spikes and behavioral markers to requested event
   events <- shift_events(obj, align = align)
 
@@ -48,7 +52,6 @@ batch_auc <- function(datafile = "~/ownCloud/ForFarah/pallidum_GNG.Rdata",
     group_by(across(all_of(c("uname",split_factor)))) %>%
     count() %>%
     pivot_wider(names_from = split_factor, values_from = n, names_prefix = "n_")
-browser()
 
   tic()
   df_psth %<>%
@@ -58,6 +61,7 @@ browser()
            ends_with("_onset_time"), starts_with("n_")) %>%
     left_join(n_trials, by = "uname") %>%
     mutate(t = list(psth_obj$t)) %>%
+    mutate(id_session = interaction(id, session)) %>%
     unnest(cols = c(psth, t))
   toc()
 
@@ -91,11 +95,30 @@ browser()
     }
   }
 
-
   tic()
   if (bootstrap_auc) {
-    df_auc <- run_auc_boot(df_psth, split_factor = split_factor, metric = "psth", lev = lev, dir = ">")
-    df_auc %<>% tidyr::chop(cols = c(t:p_value))
+
+    #temp_name <- system("uuidgen", intern = T)
+    id_session_list = unique(df_psth$id_session)
+    #for (i in 1:2) {
+    for (i in 1:length(id_session_list)) {
+      df <- df_psth %>% filter(id_session == id_session_list[i])
+
+      df_auc_1 <- run_auc_boot(df, split_factor = split_factor, metric = "psth", lev = lev, dir = ">")
+      df_auc_1 %<>% tidyr::chop(cols = c(t:p_value))
+
+      if (i==1) {
+        df_auc <- df_auc_1
+      } else {
+        df_auc %<>% bind_rows(df_auc_1)
+      }
+      #saveRDS(df_auc, paste0(temp_name, "_", i, ".Rds"))
+    }
+
+    # Reconstruct dataframe
+
+    #df_auc <- run_auc_boot(df_psth, split_factor = split_factor, metric = "psth", lev = lev, dir = ">")
+    #df_auc %<>% tidyr::chop(cols = c(t:p_value))
   } else {
     df_auc <- run_auc(df_psth, split_factor = split_factor, metric = "psth", lev = lev, dir = ">")
     df_auc %<>% tidyr::chop(cols = c(t:ci_hi))
@@ -113,18 +136,18 @@ browser()
   df_auc %<>% mutate(area_type = interaction(area,type), .after = "type")
 
   if (!is.null(filename)) {
-    df_psth_mean <- df_psth %>%
-      select(id, session, counter_total_trials, uname, split_factor, t, psth) %>%
-      tidyr::chop(cols = c(t,psth)) %>%
-      group_by(uname, get(split_factor), t) %>%
-      summarise(psth_sd = list(matrixStats::colSds(do.call(rbind, psth))),
-                psth_mean = list(colMeans(do.call(rbind, psth))) ) %>%
-      ungroup() %>%
-      left_join(pre_cue, by = "uname")
-
-    df_psth_mean %<>% left_join(df_auc %>% select(uname, area, type, area_type), by = "uname")
-
-    saveRDS(df_psth_mean, paste0(str_split(filename, ".rds")[[1]][[1]], "_psth_mean.rds"))
+    # df_psth_mean <- df_psth %>%
+    #   select(id, session, counter_total_trials, uname, split_factor, t, psth) %>%
+    #   tidyr::chop(cols = c(t,psth)) %>%
+    #   group_by(uname, get(split_factor), t) %>%
+    #   summarise(psth_sd = list(matrixStats::colSds(do.call(rbind, psth))),
+    #             psth_mean = list(colMeans(do.call(rbind, psth))) ) %>%
+    #   ungroup() %>%
+    #   left_join(pre_cue, by = "uname")
+    #
+    # df_psth_mean %<>% left_join(df_auc %>% select(uname, area, type, area_type), by = "uname")
+    #
+    # saveRDS(df_psth_mean, paste0(str_split(filename, ".rds")[[1]][[1]], "_psth_mean.rds"))
     saveRDS(df_auc, filename)
   }
 }
