@@ -1,5 +1,5 @@
 #' @export
-colormaps <- function(paper = "pallidum") {
+colormaps <- function(paper = "stn") {
 
   if (paper == "pallidum") {
     type <- c("hfd" = "#1B9E77",
@@ -23,7 +23,17 @@ colormaps <- function(paper = "pallidum") {
 
     condition <- c("go_con" = "#228833", "go" = "#4477AA", "nogo" = "#EE6677")
   } else {
+    type <- c("pos" = "#EE3377",
+              "neg" = "#33BBEE",
+              "polypos" = "#B29700",
+              "polyneg" = "#AA4499")
 
+    area_type <- c("stn.pos" = "#EE3377",
+                   "stn.neg" = "#33BBEE",
+                   "stn.polypos" = "#B29700",
+                   "stn.polyneg" = "#AA4499",
+                   "stn.NULL" = "#555555"
+    )
   }
 
   list(Type = type, AreaType = area_type, Id = id)
@@ -31,6 +41,7 @@ colormaps <- function(paper = "pallidum") {
 
 #' @export
 percentile_p <- function(x, h0) {
+  # https://journals.sagepub.com/doi/full/10.1177/2515245920911881
   half.pval <- mean(x > h0) + 0.5*mean(x == 0.5)
   2*min(c(half.pval, 1 - half.pval))
 }
