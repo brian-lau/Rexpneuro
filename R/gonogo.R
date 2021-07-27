@@ -289,7 +289,8 @@ read_eventide_single <- function(fname,
     "Is Repeat Trial" = col_logical()
   )
 
-  df <- readr::read_csv2(fname, col_names = TRUE, col_types = ct, skip = 8, locale(decimal_mark = ","))
+  df <- readr::read_csv2(fname, col_names = TRUE, col_types = ct, skip = 8, locale = locale(decimal_mark = ","))
+  #df <- readr::read_csv2(fname, col_names = TRUE, col_types = ct, skip = 8, locale(decimal_mark = ","))
 
   df %<>% janitor::remove_empty(which = "cols") %>%
     janitor::clean_names()
@@ -426,7 +427,8 @@ read_eventide_tracker <- function(fname,
     X10 = col_logical()
   )
 
-  df <- readr::read_csv2(fname, col_names = TRUE, col_types = ct, skip = 3, locale(decimal_mark = ","))
+  df <- readr::read_csv2(fname, col_names = TRUE, col_types = ct, skip = 3, locale = locale(decimal_mark = ","))
+  #df <- readr::read_csv2(fname, col_names = TRUE, col_types = ct, skip = 3, locale(decimal_mark = ","))
 
   df %<>% janitor::remove_empty(which = "cols") %>%
     dplyr::rename("counter_total_trials" = "User Field",
