@@ -500,7 +500,7 @@ single_auc_heatmap <- function(df,
                height = fix_height,
                width = fix_width,
                show_heatmap_legend = F,
-               row_names_gp = gpar(fontsize = 3),
+               row_names_gp = gpar(fontsize = 2),
                column_names_gp = gpar(fontsize = 6),
                column_names_rot = 0,
                column_names_centered = T)
