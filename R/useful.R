@@ -5,18 +5,15 @@ colormaps <- function(paper = "stn") {
     type <- c("hfd" = "#1B9E77",
               "hfd-p" = "#D95F02",
               "lfd" = "#7570B3",
-              "lfd-b" = "#E7298A")
+              "lfd-b" = "#E7298A",
+              "mfd" = "#E6AB02")
 
     area_type <- c("gpe.hfd" = "#1B9E77",
                    "gpe.hfd-p" = "#D95F02",
                    "gpe.lfd" = "#7570B3",
                    "gpe.lfd-b" = "#E7298A",
                    "gpi.hfd" = "#555555",
-                   "stn.pos" = "#1B9E77",
-                   "stn.neg" = "#D95F02",
-                   "stn.polypos" = "#7570B3",
-                   "stn.polyneg" = "#E7298A",
-                   "stn.NULL" = "#555555"
+                   "gpi.mfd" = "#E6AB02"
     )
 
     id <- c("flocky" = "red", "tess" = "black", "chanel" = "pink")
